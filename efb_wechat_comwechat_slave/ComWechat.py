@@ -216,9 +216,4 @@ class ComWeChatChannel(SlaveChannel):
         self.group_members = self.bot.GetAllGroupMembersBySql()
     #定时更新 End
 
-        
-
-# ['wxid_t7ff4y937bqm22', 'Majinchuan-Snoopy', '马进川', '执念']
-# ['19259553564@chatroom', '', '', '软件五科']
-
     
