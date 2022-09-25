@@ -1,0 +1,6 @@
+.history/
+tset.py
+build/*
+dist/*
+*.egg-info
+test*

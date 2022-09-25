@@ -1,0 +1,1 @@
+from .ComWechat import ComWeChatChannel
