@@ -25,26 +25,30 @@ from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember
 from .MsgDeco import efb_text_simple_wrapper
 from .MsgProcess import MsgProcess
-from .Utils import download_file , emoji_telegram2wechat , emoji_wechat2telegram , load_config
+from .Utils import download_file , load_config
 
 TYPE_HANDLERS = {
     'text'              : MsgProcess.text_msg,
+    'sysmsg'            : MsgProcess.sys_msg,  
     'image'             : MsgProcess.image_msg,
-    'video'             : MsgProcess.video_msg,
-    'voice'             : MsgProcess.voice_msg,
-    'qqmail'            : MsgProcess.qqmail_msg,
-    'share'             : MsgProcess.share_link_msg,
-    'location'          : MsgProcess.location_msg,
-    'other'             : MsgProcess.other_msg,
-    'animatedsticker'   : MsgProcess.image_msg,
-    'unsupported'       : MsgProcess.unsupported_msg,
-    'revokemsg'         : MsgProcess.revoke_msg,
-    'file'              : MsgProcess.file_msg,
-    'transfer'          : MsgProcess.transfer_msg,
-    'groupannouncement' : MsgProcess.group_announcement_msg,
-    'eventnotify'       : MsgProcess.event_notify_msg,
-    'miniprogram'       : MsgProcess.miniprogram_msg,
-    'scancashmoney'     : MsgProcess.scanmoney_msg,
+    'animatedsticker'   : MsgProcess.animatedsticker_msg,
+
+    # 'image'             : MsgProcess.image_msg,
+    # 'video'             : MsgProcess.video_msg,
+    # 'voice'             : MsgProcess.voice_msg,
+    # 'qqmail'            : MsgProcess.qqmail_msg,
+    # 'share'             : MsgProcess.share_link_msg,
+    # 'location'          : MsgProcess.location_msg,
+    # 'other'             : MsgProcess.other_msg,
+    # 'animatedsticker'   : MsgProcess.image_msg,
+    # 'unsupported'       : MsgProcess.unsupported_msg,
+    # 'revokemsg'         : MsgProcess.revoke_msg,
+    # 'file'              : MsgProcess.file_msg,
+    # 'transfer'          : MsgProcess.transfer_msg,
+    # 'groupannouncement' : MsgProcess.group_announcement_msg,
+    # 'eventnotify'       : MsgProcess.event_notify_msg,
+    # 'miniprogram'       : MsgProcess.miniprogram_msg,
+    # 'scancashmoney'     : MsgProcess.scanmoney_msg,
 }
 
 class ComWeChatChannel(SlaveChannel):
@@ -52,6 +56,7 @@ class ComWeChatChannel(SlaveChannel):
     channel_emoji : str = "💻"
     channel_id : str = "honus.comwechat"
 
+    bot : WeChatRobot = None
     config : Dict = {}
 
     friends : EFBPrivateChat = []
@@ -76,12 +81,28 @@ class ComWeChatChannel(SlaveChannel):
 
         @self.bot.on("self_msg")
         def on_self_msg(msg : Dict):
-            self.logger.debug(msg)
-            ...
+            self.logger.debug(f"self_msg:{msg}")
+            sender = msg["sender"]
+
+            name = self.contacts[sender] if self.contacts[sender] else sender
+            if "@chatroom" in sender:
+                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
+                    uid = sender,
+                    name = name,
+                ))
+                author = chat.self
+            else:
+                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                    uid = sender,
+                    name = name,
+                ))
+                author = chat.self
+
+            self.handle_msg(msg , author , chat)
 
         @self.bot.on("friend_msg")
         def on_friend_msg(msg : Dict):
-            self.logger.debug(msg)
+            self.logger.debug(f"friend_msg:{msg}")
             sender = msg['sender']
 
             name = self.contacts[sender] if self.contacts[sender] else sender
@@ -95,7 +116,7 @@ class ComWeChatChannel(SlaveChannel):
 
         @self.bot.on("group_msg")
         def on_group_msg(msg : Dict):
-            self.logger.debug(msg)
+            self.logger.debug(f"group_msg:{msg}")
             sender = msg["sender"]
             wxid  =  msg["wxid"] 
 
@@ -114,13 +135,18 @@ class ComWeChatChannel(SlaveChannel):
 
         @self.bot.on("public_msg")
         def on_public_msg(msg : Dict):
-            self.logger.debug(msg)
+            self.logger.debug(f"public_msg:{msg}")
             ...
 
     def handle_msg(self , msg : Dict[str, Any] , author : 'ChatMember' , chat : 'Chat'):
         efb_msgs = []
 
-        efb_msgs.append(TYPE_HANDLERS['text'](msg , chat))
+        if msg["type"] in ["animatedsticker"]:
+            efb_msgs.append(TYPE_HANDLERS[msg["type"]](msg , chat))
+        elif msg["type"] in ["text" , "sysmsg"]:
+            efb_msgs.append(TYPE_HANDLERS[msg["type"]](msg , chat))
+        else:
+            efb_msgs.append(TYPE_HANDLERS['text'](msg , chat))
 
         for efb_msg in efb_msgs:
             efb_msg.author = author
@@ -131,17 +157,27 @@ class ComWeChatChannel(SlaveChannel):
             if efb_msg.file:
                 efb_msg.file.close()
 
+    # 定时任务
+    def scheduled_job(self , t_event):
+        interval = 1800
+        
+        self.GetGroupListBySql()
+        self.GetContactListBySql()
+
+        if t_event is not None and not t_event.is_set():
+            self.scheduled_job = threading.Timer(interval, self.scheduled_job, [t_event])
+            self.scheduled_job.start()
 
     #获取全部联系人
     def get_chats(self) -> Collection['Chat']:
-        if not self.friends:
-            self.GetContactList()
+        if not self.friends and not self.groups:
+            self.GetContactListBySql()
         return self.groups + self.friends
 
     #获取联系人
     def get_chat(self, chat_uid: ChatID) -> 'Chat':
-        if not self.contacts:
-            self.GetContactList()
+        if not self.friends and not self.groups:
+            self.GetContactListBySql()
         
         if "@chatroom" in chat_uid:
             for group in self.groups:
@@ -151,7 +187,6 @@ class ComWeChatChannel(SlaveChannel):
             for friend in self.friends:
                 if friend.uid == chat_uid:
                     return friend
-        ...
 
     #发送消息
     def send_message(self, msg : Message) -> Message:
@@ -174,6 +209,9 @@ class ComWeChatChannel(SlaveChannel):
             return None
 
     def poll(self):
+        timer = threading.Event()
+        self.scheduled_job(timer)
+
         self.bot.run(main_thread = False)
 
     def send_status(self, status: 'Status'):
@@ -186,7 +224,7 @@ class ComWeChatChannel(SlaveChannel):
         pass
 
     #定时更新 Start
-    def GetContactList(self):
+    def GetContactListBySql(self):
         self.groups = []
         self.friends = []
         contacts = self.bot.GetContactListBySql()
@@ -212,7 +250,7 @@ class ComWeChatChannel(SlaveChannel):
                 self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
             
 
-    def GetGroupList(self):
+    def GetGroupListBySql(self):
         self.group_members = self.bot.GetAllGroupMembersBySql()
     #定时更新 End
 

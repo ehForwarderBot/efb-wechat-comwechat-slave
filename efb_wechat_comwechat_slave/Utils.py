@@ -5,7 +5,6 @@ import requests as requests
 import re
 import json
 import yaml
-import emoji as Emoji
 from typing import Dict , Any
 
 #从本地读取配置
@@ -23,19 +22,18 @@ def load_config(path : str) -> Dict[str, Any]:
         config: Dict[str, Any] = d
     return config
 
-def download_file(url: str, retry: int = 3 , access_token : str = None) -> tempfile:
+def download_file(url: str, retry: int = 3) -> tempfile:
     """
     A function that downloads files from given URL
     Remember to close the file once you are done with the file!
     :param retry: The max retries before giving up
     :param url: The URL that points to the file
     """
-    headers = { "Authorization": access_token }
     count = 1
     while True:
         try:
             file = tempfile.NamedTemporaryFile()
-            r = requests.get(url, headers = headers, stream=True, timeout=10)
+            r = requests.get(url, stream=True, timeout=10)
             for chunk in r.iter_content(chunk_size=1024):
                 if chunk:
                     file.write(chunk)
@@ -49,27 +47,6 @@ def download_file(url: str, retry: int = 3 , access_token : str = None) -> tempf
         else:
             break
     return file
-
-def emoji_telegram2wechat(msg):
-    text = str(msg)
-    emojiList = Emoji.get_emoji_regexp().findall(text)
-    for emoji in emojiList:
-        text = text.replace(emoji, '[@emoji=' + json.dumps(emoji).strip("\"") + ']')
-    return text
-
-def emoji_wechat2telegram(msg):
-    text = str(msg)
-    emojiList = re.findall(r'(?<=\[@emoji=)[\\0-9A-Za-z]*(?=\])', text)
-    for emoji in emojiList:
-        # 将 "\\ud83d\\ude4b" 转为 Unicode 表情
-        text = text.replace(f"[@emoji={emoji}]", emoji.encode('utf-8').decode("unicode-escape").encode('utf-16', 'surrogatepass').decode('utf-16'))
-    emojiList = re.findall('\[[\w|！|!| ]+\]' , text)
-    for emoji in emojiList:
-        try:
-            text = text.replace(emoji, WC_EMOTICON_CONVERSION[emoji])
-        except:
-            pass
-    return text
 
 def wechatimagedecode( file : tempfile) -> tempfile:
     """

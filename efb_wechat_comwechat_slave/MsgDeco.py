@@ -8,8 +8,6 @@ from ehforwarderbot import MsgType, Chat
 from ehforwarderbot.chat import ChatMember
 from ehforwarderbot.message import Substitutions, Message, LinkAttribute, LocationAttribute
 
-from .Utils import emoji_wechat2telegram
-
 def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union[Chat, ChatMember]], None] = None) -> Message:
     """
     A simple EFB message wrapper for plain text. Emojis are presented as is (plain text).
@@ -65,7 +63,7 @@ def efb_image_wrapper(file: IO, filename: str = None, text: str = None) -> Messa
         efb_msg.filename = filename
     else:
         efb_msg.filename = file.name
-        efb_msg.filename += '.' + str(mime).split('/')[1]  # Add extension suffix
+        efb_msg.filename += '.' + str(mime).split('/')[1]
 
     if text:
         efb_msg.text = text
