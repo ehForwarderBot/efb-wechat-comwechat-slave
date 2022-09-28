@@ -3,11 +3,12 @@ import threading
 from traceback import print_exc
 from pydub import AudioSegment
 import qrcode
+import os
 
 import re
 import time
 from ehforwarderbot.chat import PrivateChat , SystemChatMember
-from typing import Optional, Collection, BinaryIO, Dict, Any , Union
+from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 
 from ehforwarderbot import MsgType, Chat, Message, Status, coordinator
@@ -25,31 +26,7 @@ from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember
 from .MsgDeco import efb_text_simple_wrapper
 from .MsgProcess import MsgProcess
-from .Utils import download_file , load_config
-
-TYPE_HANDLERS = {
-    'text'              : MsgProcess.text_msg,
-    'sysmsg'            : MsgProcess.sys_msg,  
-    'image'             : MsgProcess.image_msg,
-    'animatedsticker'   : MsgProcess.animatedsticker_msg,
-
-    # 'image'             : MsgProcess.image_msg,
-    # 'video'             : MsgProcess.video_msg,
-    # 'voice'             : MsgProcess.voice_msg,
-    # 'qqmail'            : MsgProcess.qqmail_msg,
-    # 'share'             : MsgProcess.share_link_msg,
-    # 'location'          : MsgProcess.location_msg,
-    # 'other'             : MsgProcess.other_msg,
-    # 'animatedsticker'   : MsgProcess.image_msg,
-    # 'unsupported'       : MsgProcess.unsupported_msg,
-    # 'revokemsg'         : MsgProcess.revoke_msg,
-    # 'file'              : MsgProcess.file_msg,
-    # 'transfer'          : MsgProcess.transfer_msg,
-    # 'groupannouncement' : MsgProcess.group_announcement_msg,
-    # 'eventnotify'       : MsgProcess.event_notify_msg,
-    # 'miniprogram'       : MsgProcess.miniprogram_msg,
-    # 'scancashmoney'     : MsgProcess.scanmoney_msg,
-}
+from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
@@ -64,6 +41,9 @@ class ComWeChatChannel(SlaveChannel):
 
     contacts : Dict = {}            # {wxid : {alias : str , remark : str, nickname : str , type : int}} -> {wxid : name(after handle)}
     group_members : Dict = {}       # {"group_id" : { "wxID" : "displayName"}}
+    
+    cache : List = []               # 缓存发送过的消息ID  TODO: 循环队列
+    file_msg : Dict = {}            # 存储待修改的文件类消息 {uid : msg}
 
     __version__ = version.__version__
     logger: logging.Logger = logging.getLogger("comwechat")
@@ -76,7 +56,9 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("ComWeChat Slave Channel initialized.")
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
+        self.dir = self.config["dir"]
         self.bot = WeChatRobot()
+        self.base_path = self.bot.get_base_path()
         ChatMgr.slave_channel = self
 
         @self.bot.on("self_msg")
@@ -113,7 +95,6 @@ class ComWeChatChannel(SlaveChannel):
             author = chat.other
             self.handle_msg(msg, author, chat)
             
-
         @self.bot.on("group_msg")
         def on_group_msg(msg : Dict):
             self.logger.debug(f"group_msg:{msg}")
@@ -133,29 +114,76 @@ class ComWeChatChannel(SlaveChannel):
             ))
             self.handle_msg(msg, author, chat)
 
-        @self.bot.on("public_msg")
-        def on_public_msg(msg : Dict):
-            self.logger.debug(f"public_msg:{msg}")
-            ...
+        # @self.bot.on("public_msg")
+        # def on_public_msg(msg : Dict):
+        #     self.logger.debug(f"public_msg:{msg}")
+        #     ...
 
     def handle_msg(self , msg : Dict[str, Any] , author : 'ChatMember' , chat : 'Chat'):
         efb_msgs = []
 
-        if msg["type"] in ["animatedsticker"]:
-            efb_msgs.append(TYPE_HANDLERS[msg["type"]](msg , chat))
-        elif msg["type"] in ["text" , "sysmsg"]:
-            efb_msgs.append(TYPE_HANDLERS[msg["type"]](msg , chat))
-        else:
-            efb_msgs.append(TYPE_HANDLERS['text'](msg , chat))
+        emojiList = re.findall('\[[\w|！|!| ]+\]' , msg["message"])
+        for emoji in emojiList:
+            try:
+                msg["message"] = msg["message"].replace(emoji, WC_EMOTICON_CONVERSION[emoji])
+            except:
+                pass
 
-        for efb_msg in efb_msgs:
-            efb_msg.author = author
-            efb_msg.chat = chat
-            efb_msg.uid = msg["msgid"]
-            efb_msg.deliver_to = coordinator.master
-            coordinator.send_message(efb_msg)
-            if efb_msg.file:
-                efb_msg.file.close()
+        if msg["msgid"] not in self.cache:
+            self.cache.append(msg["msgid"])
+        else:
+            return
+
+        if "FileStorage" in msg["filepath"]:
+            msg["first"] = True
+            msg["timestamp"] = int(time.time())
+            msg["filepath"] = msg["filepath"].replace("\\","/")
+            msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
+            self.file_msg[msg["filepath"]] = ( msg , author , chat )
+            return
+
+        efb_msg = MsgProcess(msg , chat)
+
+        efb_msg.author = author
+        efb_msg.chat = chat
+        efb_msg.uid = msg["msgid"]
+        efb_msg.deliver_to = coordinator.master
+        coordinator.send_message(efb_msg)
+        if efb_msg.file:
+            efb_msg.file.close()
+
+    def handle_file_msg(self):
+        while True:
+            if len(self.file_msg) == 0:
+                time.sleep(1)
+                continue
+            else:
+                for path in list(self.file_msg.keys()):
+                    flag = False
+                    msg = self.file_msg[path][0]
+                    author = self.file_msg[path][1]
+                    chat = self.file_msg[path][2]
+                    msg["first"]     = False
+                    if os.path.exists(path):
+                        efb_msg = MsgProcess(msg , chat)
+                        flag = True
+                    else:
+                        if (int(time.time()) - msg["timestamp"]) > 60:
+                            msg['message'] = "文件下载超时,请在手机端查看"
+                            msg["type"] = "text"
+                            efb_msg = MsgProcess(msg , chat)
+                            flag = True
+                    
+                    if flag:
+                        del self.file_msg[path]
+                        efb_msg.author = author
+                        efb_msg.chat = chat
+                        efb_msg.uid = msg["msgid"]
+                        efb_msg.deliver_to = coordinator.master
+                        coordinator.send_message(efb_msg)
+                        if efb_msg.file:
+                            efb_msg.file.close()
+                    time.sleep(0.5)
 
     # 定时任务
     def scheduled_job(self , t_event):
@@ -197,7 +225,26 @@ class ComWeChatChannel(SlaveChannel):
         
         if msg.type in [MsgType.Text , MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
-
+        elif msg.type in [MsgType.Image]:
+            name = msg.file.name.replace("/tmp/", "")
+            local_path = f"{self.dir}{name}"
+            load_temp_file_to_local(msg.file, local_path)
+            img_path = self.base_path + "\\" + local_path.split("/")[-1]
+            self.bot.SendImage(receiver = chat_uid , img_path = img_path)
+            try:
+                os.remove(img_path)
+            except:
+                ...
+        elif msg.type in [MsgType.File]:
+            name = msg.file.name.replace("/tmp/", "")
+            local_path = f"{self.dir}{name}"
+            load_temp_file_to_local(msg.file, local_path)
+            file_path = self.base_path + "\\" +local_path.split("/")[-1]
+            self.bot.SendFile(receiver = chat_uid , file_path = file_path)
+            try:
+                os.remove(file_path)
+            except:
+                ...
         return msg
 
     def get_chat_picture(self, chat: 'Chat') -> BinaryIO:
@@ -213,6 +260,10 @@ class ComWeChatChannel(SlaveChannel):
         self.scheduled_job(timer)
 
         self.bot.run(main_thread = False)
+
+        t = threading.Thread(target = self.handle_file_msg)
+        t.daemon = True
+        t.start()
 
     def send_status(self, status: 'Status'):
         pass

@@ -123,7 +123,7 @@ def efb_file_wrapper(file: IO, filename: str = None, text: str = None) -> Messag
     return efb_msg
 
 
-def efb_share_link_wrapper(text: str) -> Tuple[Message]:
+def efb_share_link_wrapper(text: str) -> Message:
     """
     处理msgType49消息 - 复合xml, xml 中 //appmsg/type 指示具体消息类型.
     /msg/appmsg/type
@@ -151,7 +151,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
     """
 
     xml = etree.fromstring(text)
-    efb_msgs = []
     result_text = ""
     try: 
         type = int(xml.xpath('/msg/appmsg/type/text()')[0])
@@ -162,7 +161,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 type = MsgType.Text,
                 text = title if title==des else title+" :\n"+des,
             )
-            efb_msgs.append(efb_msg)
         elif type == 3: #音乐分享
             try:
                 music_name = xml.xpath('/msg/appmsg/title/text()')[0]
@@ -188,7 +186,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 )
             except:
                 pass
-            efb_msgs.append(efb_msg)
         elif type in [ 4 , 36 ]: # 至少包含小红书分享 , 京东农场
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             des = xml.xpath('/msg/appmsg/des/text()')[0]
@@ -207,7 +204,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 text= None,
                 vendor_specific={ "is_mp": False }
             )
-            efb_msgs.append(efb_msg)
         elif type == 5: # xml链接
             if len(xml.xpath('/msg/appmsg/showtype/text()'))!=0:
                 showtype = int(xml.xpath('/msg/appmsg/showtype/text()')[0])
@@ -251,7 +247,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                         text=result_text,
                         vendor_specific={ "is_mp": True }
                     )
-                    efb_msgs.append(efb_msg)
             elif showtype == 1: # 公众号发的推送
                 items = xml.xpath('//item')
                 for item in items:
@@ -286,13 +281,11 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                             type=MsgType.Text,
                             text=result_text
                         )
-                    efb_msgs.append(efb_msg)
         elif type == 8:
             efb_msg = Message(
                 type=MsgType.Unsupported,
                 text='未解密表情消息 ，请在手机端查看',
             )
-            efb_msgs.append(efb_msg)
         elif type == 19: # 合并转发的聊天记录
             msg_title = xml.xpath('/msg/appmsg/title/text()')[0]
             forward_content = xml.xpath('/msg/appmsg/des/text()')[0]
@@ -302,7 +295,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 text= emoji_wechat2telegram(result_text),
                 vendor_specific={ "is_forwarded": True }
             )
-            efb_msgs.append(efb_msg)
         elif type == 21: # 微信运动
             msg_title = xml.xpath('/msg/appmsg/title/text()')[0].strip("<![CDATA[夺得").strip("冠军]]>")
             if '排行' not in msg_title:
@@ -311,7 +303,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                     type=MsgType.Text,
                     text= msg_title ,
                 )
-                efb_msgs.append(efb_msg)
             else:
                 rank = xml.xpath('/msg/appmsg/hardwareinfo/messagenodeinfo/rankinfo/rank/rankdisplay/text()')[0].strip("<![CDATA[").strip("]]>")
                 steps = xml.xpath('/msg/appmsg/hardwareinfo/messagenodeinfo/rankinfo/score/scoredisplay/text()')[0].strip("<![CDATA[").strip("]]>")
@@ -321,7 +312,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                     text=result_text,
                     vendor_specific={ "is_wechatsport": True }
                 )
-                efb_msgs.append(efb_msg)
         elif type == 24:
             desc = xml.xpath('/msg/appmsg/des/text()')[0]
             recorditem = xml.xpath('/msg/appmsg/recorditem/text()')[0]
@@ -332,14 +322,12 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 text= '微信笔记 :\n  - - - - - - - - - - - - - - - \n' +desc + '\n' + datadesc,
                 vendor_specific={ "is_mp": True }
             )
-            efb_msgs.append(efb_msg)
         elif type == 35:
             efb_msg = Message(
                 type=MsgType.Text,
                 text= '系统消息 : 消息同步',
                 vendor_specific={ "is_mp": False }
             )
-            efb_msgs.append(efb_msg)
         elif type == 40: # 转发的转发消息
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             desc = xml.xpath('/msg/appmsg/des/text()')[0]
@@ -348,7 +336,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 text= f"{title}\n\n{desc}" ,
                 vendor_specific={ "is_forwarded": True }
             )
-            efb_msgs.append(efb_msg)
         elif type == 51: # 视频（微信视频号分享）
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             url = xml.xpath('/msg/appmsg/url/text()')[0]
@@ -373,7 +360,6 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 text=result_text,
                 vendor_specific={ "is_mp": True }
             )
-            efb_msgs.append(efb_msg)
         elif type == 57: # 引用（回复）消息
             msg = xml.xpath('/msg/appmsg/title/text()')[0]
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
@@ -382,15 +368,14 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
             refer_displayname = xml.xpath('/msg/appmsg/refermsg/displayname/text()')[0] # 被引用消息发送人微信名称
             if refer_msgType == 1: # 被引用的消息是文本
                 refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
-                result_text += f"「{refer_displayname}:\n{refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
+                result_text += f"「{refer_displayname}: {refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
             else: # 被引用的消息非文本，提示不支持
-                result_text += f"「{refer_displayname}:\n系统消息：被引用的消息不是文本，暂不支持展示」\n  - - - - - - - - - - - - - - - \n{msg}"
+                result_text += f"「{refer_displayname}: 系统消息: 被引用的消息不是文本,暂不支持展示」\n  - - - - - - - - - - - - - - - \n{msg}"
             efb_msg = Message(
                 type=MsgType.Text,
                 text=result_text,
                 vendor_specific={ "is_refer": True }
             )
-            efb_msgs.append(efb_msg)
         elif type == 63: # 直播（微信视频号分享）
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             url = xml.xpath('/msg/appmsg/url/text()')[0]
@@ -409,18 +394,17 @@ def efb_share_link_wrapper(text: str) -> Tuple[Message]:
                 text=result_text,
                 vendor_specific={ "is_mp": True }
             )
-            efb_msgs.append(efb_msg)
     except Exception as e:
         print_exc()
 
-    if efb_msgs == []:
+    try:
+        return efb_msg
+    except:
         efb_msg = Message(
             type=MsgType.Text,
             text=text
         )
-        efb_msgs.append(efb_msg)
-
-    return tuple(efb_msgs)
+        return efb_msg
 
 def efb_location_wrapper(msg: str) -> Message:
     efb_msg = Message()

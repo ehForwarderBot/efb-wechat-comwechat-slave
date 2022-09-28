@@ -48,7 +48,7 @@ def download_file(url: str, retry: int = 3) -> tempfile:
             break
     return file
 
-def wechatimagedecode( file : tempfile) -> tempfile:
+def wechatimagedecode( file : str) -> tempfile:
     """
     代码来源 https://github.com/zhangxiaoyang/WechatImageDecoder
     """
@@ -72,15 +72,33 @@ def wechatimagedecode( file : tempfile) -> tempfile:
                 return (encoding, magic)
         return None
 
-    with open(file.name , 'rb') as f:
+    with open(file , 'rb') as f:
         buf = bytearray(f.read())
     file_type, magic = guess_encoding(buf)
 
     ret_file = tempfile.NamedTemporaryFile()
     with open(ret_file.name , 'wb') as f:
         f.write(decode(magic, buf))
-    file.close()
+    f.close()
     return ret_file
+
+def load_local_file_to_temp(file : str) -> tempfile:
+    """
+    从本地文件读取文件到临时文件
+    """
+    ret_file = tempfile.NamedTemporaryFile()
+    with open(file , 'rb') as f:
+        ret_file.write(f.read())
+    f.close()
+    return ret_file
+
+def load_temp_file_to_local(file : tempfile , path : str) -> None:
+    """
+    从临时文件读取文件到本地
+    """
+    with open(path , 'wb') as f:
+        f.write(file.read())
+    f.close()
 
 WC_EMOTICON_CONVERSION = {
     '[微笑]': '😃', '[Smile]': '😃',
