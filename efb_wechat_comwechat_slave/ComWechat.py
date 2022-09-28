@@ -10,6 +10,7 @@ import time
 from ehforwarderbot.chat import PrivateChat , SystemChatMember
 from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
+from cachetools import TTLCache
 
 from ehforwarderbot import MsgType, Chat, Message, Status, coordinator
 from wechatrobot import WeChatRobot
@@ -42,8 +43,8 @@ class ComWeChatChannel(SlaveChannel):
     contacts : Dict = {}            # {wxid : {alias : str , remark : str, nickname : str , type : int}} -> {wxid : name(after handle)}
     group_members : Dict = {}       # {"group_id" : { "wxID" : "displayName"}}
     
-    cache : List = []               # 缓存发送过的消息ID  TODO: 循环队列
-    file_msg : Dict = {}            # 存储待修改的文件类消息 {uid : msg}
+    cache =  TTLCache(maxsize=100, ttl=300)  # 缓存发送过的消息ID
+    file_msg : Dict = {}                     # 存储待修改的文件类消息 {path : msg}
 
     __version__ = version.__version__
     logger: logging.Logger = logging.getLogger("comwechat")
@@ -131,7 +132,7 @@ class ComWeChatChannel(SlaveChannel):
 
         if "FileStorage" in msg["filepath"]:
             if msg["msgid"] not in self.cache:
-                self.cache.append(msg["msgid"])
+                self.cache[msg["msgid"]] = None
             else:
                 return
             msg["timestamp"] = int(time.time())
