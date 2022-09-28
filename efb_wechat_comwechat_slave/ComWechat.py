@@ -129,13 +129,11 @@ class ComWeChatChannel(SlaveChannel):
             except:
                 pass
 
-        if msg["msgid"] not in self.cache:
-            self.cache.append(msg["msgid"])
-        else:
-            return
-
         if "FileStorage" in msg["filepath"]:
-            msg["first"] = True
+            if msg["msgid"] not in self.cache:
+                self.cache.append(msg["msgid"])
+            else:
+                return
             msg["timestamp"] = int(time.time())
             msg["filepath"] = msg["filepath"].replace("\\","/")
             msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
@@ -163,7 +161,6 @@ class ComWeChatChannel(SlaveChannel):
                     msg = self.file_msg[path][0]
                     author = self.file_msg[path][1]
                     chat = self.file_msg[path][2]
-                    msg["first"]     = False
                     if os.path.exists(path):
                         efb_msg = MsgProcess(msg , chat)
                         flag = True
@@ -225,7 +222,7 @@ class ComWeChatChannel(SlaveChannel):
         
         if msg.type in [MsgType.Text , MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
-        elif msg.type in [MsgType.Image]:
+        elif msg.type in [MsgType.Image , MsgType.Sticker]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{name}"
             load_temp_file_to_local(msg.file, local_path)

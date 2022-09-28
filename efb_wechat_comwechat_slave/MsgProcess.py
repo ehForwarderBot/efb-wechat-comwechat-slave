@@ -53,26 +53,20 @@ def MsgProcess(msg : dict , chat) -> Message:
             return efb_text_simple_wrapper("sys_msg :" + str(msg['message']))
 
     elif msg["type"] == "image":
-        if msg["first"]:
-            return efb_text_simple_wrapper("[接收到图片消息,等待下载完成]")
-        else:
-            file = wechatimagedecode(msg["filepath"])
-            return efb_image_wrapper(file)
+        file = wechatimagedecode(msg["filepath"])
+        return efb_image_wrapper(file)
 
     elif msg["type"] == "animatedsticker":
         try:
-            url = re.search("cdnurl = \"(.*?)\"", msg["message"]).group(1).replace("amp;", "")
+            url = re.search("cdnurl\s*=\s*\"(.*?)\"", msg["message"]).group(1).replace("amp;", "")
             file = download_file(url)
             return efb_image_wrapper(file)
         except:
             return efb_text_simple_wrapper("Image received and download failed. Please check it on your phone.")
     elif msg["type"] == "share":
         if "FileStorage" in msg["filepath"]:
-            if msg["first"]:
-                return efb_text_simple_wrapper("[接收到文件消息,等待下载完成]")
-            else:
-                file = load_local_file_to_temp(msg["filepath"])
-                return efb_file_wrapper(file , msg["filepath"].split("/")[-1])
+            file = load_local_file_to_temp(msg["filepath"])
+            return efb_file_wrapper(file , msg["filepath"].split("/")[-1])
         return efb_share_link_wrapper(msg['message'])
     else:
         return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
