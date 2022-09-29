@@ -88,6 +88,8 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"friend_msg:{msg}")
             sender = msg['sender']
 
+            if sender == "":  #eventnotify
+                return
             name = self.contacts[sender] if self.contacts[sender] else sender
             chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid= sender,
@@ -129,20 +131,22 @@ class ComWeChatChannel(SlaveChannel):
                 msg["message"] = msg["message"].replace(emoji, WC_EMOTICON_CONVERSION[emoji])
             except:
                 pass
-
-        if "FileStorage" in msg["filepath"]:
-            if msg["msgid"] not in self.cache:
-                self.cache[msg["msgid"]] = None
-            else:
+        
+        try:
+            if "FileStorage" in msg["filepath"]:
+                if msg["msgid"] not in self.cache:
+                    self.cache[msg["msgid"]] = None
+                else:
+                    return
+                msg["timestamp"] = int(time.time())
+                msg["filepath"] = msg["filepath"].replace("\\","/")
+                msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
+                self.file_msg[msg["filepath"]] = ( msg , author , chat )
                 return
-            msg["timestamp"] = int(time.time())
-            msg["filepath"] = msg["filepath"].replace("\\","/")
-            msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
-            self.file_msg[msg["filepath"]] = ( msg , author , chat )
-            return
+        except:
+            ...
 
         efb_msg = MsgProcess(msg , chat)
-
         efb_msg.author = author
         efb_msg.chat = chat
         efb_msg.uid = msg["msgid"]
@@ -163,17 +167,16 @@ class ComWeChatChannel(SlaveChannel):
                     author = self.file_msg[path][1]
                     chat = self.file_msg[path][2]
                     if os.path.exists(path):
-                        efb_msg = MsgProcess(msg , chat)
                         flag = True
                     else:
                         if (int(time.time()) - msg["timestamp"]) > 60:
                             msg['message'] = "文件下载超时,请在手机端查看"
                             msg["type"] = "text"
-                            efb_msg = MsgProcess(msg , chat)
                             flag = True
                     
                     if flag:
                         del self.file_msg[path]
+                        efb_msg = MsgProcess(msg , chat)
                         efb_msg.author = author
                         efb_msg.chat = chat
                         efb_msg.uid = msg["msgid"]
@@ -297,7 +300,6 @@ class ComWeChatChannel(SlaveChannel):
                     name=name
                 )
                 self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
-            
 
     def GetGroupListBySql(self):
         self.group_members = self.bot.GetAllGroupMembersBySql()
