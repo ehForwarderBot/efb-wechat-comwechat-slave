@@ -6,6 +6,8 @@ import re
 import json
 import yaml
 from typing import Dict , Any
+import pilk
+import pydub
 
 #从本地读取配置
 def load_config(path : str) -> Dict[str, Any]:
@@ -99,6 +101,23 @@ def load_temp_file_to_local(file : tempfile , path : str) -> None:
     with open(path , 'wb') as f:
         f.write(file.read())
     f.close()
+
+def convert_silk_to_mp3(file : tempfile) -> tempfile:
+    """
+    将silk文件转换为mp3文件
+    """
+    f = tempfile.NamedTemporaryFile()
+    file.seek(0)
+    silk_header = file.read(10)
+    file.seek(0)
+    if b"#!SILK_V3" in silk_header:
+        pilk.decode(file.name, f.name)
+        file.close()
+        pydub.AudioSegment.from_raw(file= f , sample_width=2, frame_rate=24000, channels=1) \
+            .export( f , format="ogg", codec="libopus",
+                    parameters=['-vbr', 'on'])
+    return f
+
 
 WC_EMOTICON_CONVERSION = {
     '[微笑]': '😃', '[Smile]': '😃',

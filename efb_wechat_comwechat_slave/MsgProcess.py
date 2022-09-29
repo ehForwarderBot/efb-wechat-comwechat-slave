@@ -1,10 +1,9 @@
 import base64
 import tempfile
 import logging
-from .Utils import download_file , wechatimagedecode , load_config , load_local_file_to_temp
-from .MsgDeco import efb_text_simple_wrapper, efb_text_delete_wrapper, efb_image_wrapper, efb_video_wrapper, efb_share_link_wrapper, efb_location_wrapper, efb_file_wrapper , efb_unsupported_wrapper , efb_voice_wrapper , efb_qqmail_wrapper , efb_miniprogram_wrapper
+from .Utils import *
+from .MsgDeco import *
 import re
-import pilk
 import pydub
 import json
 from lxml import etree
@@ -63,10 +62,20 @@ def MsgProcess(msg : dict , chat) -> Message:
             return efb_image_wrapper(file)
         except:
             return efb_text_simple_wrapper("Image received and download failed. Please check it on your phone.")
+
     elif msg["type"] == "share":
         if "FileStorage" in msg["filepath"]:
             file = load_local_file_to_temp(msg["filepath"])
             return efb_file_wrapper(file , msg["filepath"].split("/")[-1])
         return efb_share_link_wrapper(msg['message'])
+
+    elif msg["type"] == "voice":
+        file = convert_silk_to_mp3(load_local_file_to_temp(msg["filepath"]))
+        return efb_voice_wrapper(file)
+
+    elif msg["type"] == "video":
+        file = load_local_file_to_temp(msg["filepath"])
+        return efb_video_wrapper(file)
+
     else:
         return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
