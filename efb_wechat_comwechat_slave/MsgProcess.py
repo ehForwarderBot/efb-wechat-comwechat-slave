@@ -42,7 +42,7 @@ def MsgProcess(msg : dict , chat) -> Message:
         #     return efb_text_simple_wrapper(msg['msg'] , at_list)
         return efb_text_simple_wrapper(msg['message'])
 
-    elif msg["type"] == "sys_msg":
+    elif msg["type"] == "sysmsg":
         if "<revokemsg>" in msg["message"]:
             return efb_text_simple_wrapper(msg['message'].replace("<revokemsg>","").replace("</revokemsg>",""))
         # 修改群名为 | 收到红包 | 拍了拍 | 邀请 | 与群里其他人都不是朋友关系，请注意隐私安全 | 对方未添加你为朋友。对方添加后，才能进行通话 |
