@@ -202,8 +202,8 @@ class ComWeChatChannel(SlaveChannel):
         self.GetContactListBySql()
 
         if t_event is not None and not t_event.is_set():
-            self.scheduled_job = threading.Timer(interval, self.scheduled_job, [t_event])
-            self.scheduled_job.start()
+            self.scheduled = threading.Timer(interval, self.scheduled_job, [t_event])
+            self.scheduled.start()
 
     #获取全部联系人
     def get_chats(self) -> Collection['Chat']:
