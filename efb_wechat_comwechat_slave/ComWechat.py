@@ -135,7 +135,7 @@ class ComWeChatChannel(SlaveChannel):
                 pass
         
         try:
-            if "FileStorage" in msg["filepath"]:
+            if ("FileStorage" in msg["filepath"]) and ("Cache" not in msg["filepath"]):
                 if msg["msgid"] not in self.cache:
                     self.cache[msg["msgid"]] = None
                 else:

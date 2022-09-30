@@ -139,6 +139,7 @@ def efb_share_link_wrapper(text: str) -> Message:
     //appmsg/type = 19 : 合并转发的聊天记录
     //appmsg/type = 21 : 微信运动
     //appmsg/type = 24 : 从收藏中分享的笔记
+    //appmsg/type = 33 : 美团外卖
     //appmsg/type = 35 : 消息同步
     //appmsg/type = 36 : 京东农场
     //appmsg/type = 51 : 视频（微信视频号分享）
@@ -320,6 +321,22 @@ def efb_share_link_wrapper(text: str) -> Message:
             efb_msg = Message(
                 type=MsgType.Text,
                 text= '微信笔记 :\n  - - - - - - - - - - - - - - - \n' +desc + '\n' + datadesc,
+                vendor_specific={ "is_mp": True }
+            )
+        elif type == 33:
+            sourcedisplayname = xml.xpath('/msg/appmsg/sourcedisplayname/text()')[0]
+            weappiconurl = xml.xpath('/msg/appmsg/weappinfo/weappiconurl/text()')[0]
+            url = xml.xpath('/msg/appmsg/url/text()')[0]
+            attribute = LinkAttribute(
+                title=sourcedisplayname,
+                description=None,
+                url=url,
+                image=weappiconurl
+            )
+            efb_msg = Message(
+                attributes=attribute,
+                type=MsgType.Link,
+                text=None,
                 vendor_specific={ "is_mp": True }
             )
         elif type == 35:
