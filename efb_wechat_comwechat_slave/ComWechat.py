@@ -43,16 +43,18 @@ class ComWeChatChannel(SlaveChannel):
     contacts : Dict = {}            # {wxid : {alias : str , remark : str, nickname : str , type : int}} -> {wxid : name(after handle)}
     group_members : Dict = {}       # {"group_id" : { "wxID" : "displayName"}}
     
-    cache =  TTLCache(maxsize=100, ttl=300)  # 缓存发送过的消息ID
+    time_out : int = 120
+    cache =  TTLCache(maxsize=200, ttl= time_out)  # 缓存发送过的消息ID
     file_msg : Dict = {}                     # 存储待修改的文件类消息 {path : msg}
+
+
 
     __version__ = version.__version__
     logger: logging.Logger = logging.getLogger("comwechat")
     logger.setLevel(logging.DEBUG)
 
-    # MsgType.File , MsgType.Video
-    supported_message_types = {MsgType.Text, MsgType.Sticker, MsgType.Image,
-        MsgType.Link, MsgType.Voice, MsgType.Animation}
+    # MsgType.File , MsgType.Video , MsgType.Animation , MsgType.Voice
+    supported_message_types = {MsgType.Text, MsgType.Sticker, MsgType.Image , MsgType.Link}
 
     def __init__(self, instance_id: InstanceID = None):
         super().__init__(instance_id=instance_id)
@@ -90,8 +92,12 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"friend_msg:{msg}")
             sender = msg['sender']
 
-            if sender == "":  #eventnotify
-                return
+            if msg["type"] == "eventnotify":
+                # 临时处理
+                sender = msg["self"]
+                msg["type"] = "text"
+                msg["msgid"] = int(time.time())
+                msg["message"] = "[系统消息，请在客户端查看]"
 
             try:
                 name = self.contacts[sender]
@@ -156,12 +162,14 @@ class ComWeChatChannel(SlaveChannel):
             except:
                 pass
         
+
+        if msg["msgid"] not in self.cache:
+            self.cache[msg["msgid"]] = None
+        else:
+            return
+
         try:
             if ("FileStorage" in msg["filepath"]) and ("Cache" not in msg["filepath"]):
-                if msg["msgid"] not in self.cache:
-                    self.cache[msg["msgid"]] = None
-                else:
-                    return
                 msg["timestamp"] = int(time.time())
                 msg["filepath"] = msg["filepath"].replace("\\","/")
                 msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
@@ -199,7 +207,7 @@ class ComWeChatChannel(SlaveChannel):
                     if os.path.exists(path):
                         flag = True
                     else:
-                        if (int(time.time()) - msg["timestamp"]) > 60:
+                        if (int(time.time()) - msg["timestamp"]) > self.time_out:
                             msg_type = msg["type"]
                             msg['message'] = f"{msg_type} 下载超时,请在手机端查看"
                             msg["type"] = "text"
@@ -266,7 +274,7 @@ class ComWeChatChannel(SlaveChannel):
                 os.remove(img_path)
             except:
                 ...
-        elif msg.type in [MsgType.File , MsgType.Video]:
+        elif msg.type in [MsgType.File , MsgType.Video , MsgType.Animation]:
             ...
             # name = msg.file.name.replace("/tmp/", "")
             # local_path = f"{self.dir}{name}"
