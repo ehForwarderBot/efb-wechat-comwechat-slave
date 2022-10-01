@@ -74,8 +74,9 @@ def MsgProcess(msg : dict , chat) -> Message:
         return efb_voice_wrapper(file)
 
     elif msg["type"] == "video":
-        file = load_local_file_to_temp(msg["filepath"])
-        return efb_video_wrapper(file)
+        return efb_text_simple_wrapper("暂时不支持视频消息")
+        # file = load_local_file_to_temp(msg["filepath"])
+        # return efb_video_wrapper(file)
 
     else:
         return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))

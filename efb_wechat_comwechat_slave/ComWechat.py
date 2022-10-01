@@ -92,7 +92,20 @@ class ComWeChatChannel(SlaveChannel):
 
             if sender == "":  #eventnotify
                 return
-            name = self.contacts[sender] if self.contacts[sender] else sender
+
+            try:
+                name = self.contacts[sender]
+            except KeyError:
+                # self.GetGroupListBySql()
+                # self.GetContactListBySql()
+                # name = self.contacts[sender]
+
+                data = self.bot.GetContactBySql(wxid = sender)
+                if data:
+                    name = data[3]
+                else:
+                    name = sender
+
             chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid= sender,
                     name= name,
@@ -106,15 +119,24 @@ class ComWeChatChannel(SlaveChannel):
             sender = msg["sender"]
             wxid  =  msg["wxid"] 
 
-            chatname = self.contacts[sender] if self.contacts[sender] else sender
+            if msg["type"] == "sysmsg" and "邀请" in msg["message"]:
+                self.GetGroupListBySql()
+                self.GetContactListBySql()
+
+            chatname = self.contacts[sender]
             chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
                 uid = sender,
                 name = chatname,
             ))
 
+            try:
+                name = self.contacts[wxid]
+            except:
+                name = wxid
+
             author = ChatMgr.build_efb_chat_as_member(chat, EFBGroupMember(
                 uid = wxid,
-                name = self.contacts[wxid] if self.contacts[wxid] else wxid,
+                name = name,
                 alias = self.group_members.get(sender,{}).get(wxid , None),
             ))
             self.handle_msg(msg, author, chat)
@@ -178,7 +200,8 @@ class ComWeChatChannel(SlaveChannel):
                         flag = True
                     else:
                         if (int(time.time()) - msg["timestamp"]) > 60:
-                            msg['message'] = "文件下载超时,请在手机端查看"
+                            msg_type = msg["type"]
+                            msg['message'] = f"{msg_type} 下载超时,请在手机端查看"
                             msg["type"] = "text"
                             flag = True
                     
@@ -192,7 +215,6 @@ class ComWeChatChannel(SlaveChannel):
                         coordinator.send_message(efb_msg)
                         if efb_msg.file:
                             efb_msg.file.close()
-                    time.sleep(0.5)
 
     # 定时任务
     def scheduled_job(self , t_event):
