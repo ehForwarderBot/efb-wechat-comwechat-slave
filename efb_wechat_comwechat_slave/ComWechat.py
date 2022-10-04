@@ -71,7 +71,15 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"self_msg:{msg}")
             sender = msg["sender"]
 
-            name = self.contacts[sender] if self.contacts[sender] else sender
+            try:
+                name = self.contacts[sender] if self.contacts[sender] else sender
+            except:
+                data = self.bot.GetContactBySql(wxid = sender)
+                if data:
+                    name = data[3]
+                else:
+                    name = sender
+
             if "@chatroom" in sender:
                 chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
                     uid = sender,

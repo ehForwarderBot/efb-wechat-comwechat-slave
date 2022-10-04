@@ -147,6 +147,7 @@ def efb_share_link_wrapper(text: str) -> Message:
     //appmsg/type = 57 : 【感谢 @honus 提供样本 xml】引用(回复)消息，未细致研究哪个参数是被引用的消息 id 
     //appmsg/type = 63 : 直播（微信视频号分享）
     //appmsg/type = 74 : 文件 (收到文件的第一个提示)
+    //appmsg/type = 2000 : 转账
     :param text: The content of the message
     :return: EFB Message
     """
@@ -409,6 +410,21 @@ def efb_share_link_wrapper(text: str) -> Message:
                 text=result_text,
                 vendor_specific={ "is_mp": True }
             )
+        elif type == 2000:
+            subtype = xml.xpath("/msg/appmsg/wcpayinfo/paysubtype/text()")[0]
+            money =  xml.xpath("/msg/appmsg/wcpayinfo/feedesc/text()")[0].strip("<![CDATA[").strip("]]>")
+            if subtype == "1":
+                efb_msg = Message(
+                    type=MsgType.Text,
+                    text= f"收到微信转账 {money} 元",
+                    vendor_specific={ "is_mp": False }
+                )
+            elif subtype == "3":
+                efb_msg = Message(
+                    type=MsgType.Text,
+                    text= f"接收微信转账 {money} 元",
+                    vendor_specific={ "is_mp": False }
+                )
     except Exception as e:
         print_exc()
 
