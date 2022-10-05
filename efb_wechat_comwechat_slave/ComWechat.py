@@ -299,7 +299,7 @@ class ComWeChatChannel(SlaveChannel):
         wxid = chat.uid
         result = self.bot.GetPictureBySql(wxid = wxid)
         if result:
-            return download_file(result['data'][1][1])
+            return download_file(result)
         else:
             return None
 
