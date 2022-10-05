@@ -2,7 +2,7 @@ import logging, tempfile
 import threading
 from traceback import print_exc
 from pydub import AudioSegment
-import qrcode
+# import qrcode TODO
 import os
 
 import re
