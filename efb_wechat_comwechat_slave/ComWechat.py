@@ -137,7 +137,11 @@ class ComWeChatChannel(SlaveChannel):
                 self.GetGroupListBySql()
                 self.GetContactListBySql()
 
-            chatname = self.contacts[sender]
+            if sender in self.contacts.keys():
+                chatname = self.contacts[sender]
+            else:
+                chatname = sender
+                
             chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
                 uid = sender,
                 name = chatname,
