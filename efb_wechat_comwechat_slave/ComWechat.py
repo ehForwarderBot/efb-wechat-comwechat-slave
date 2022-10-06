@@ -332,7 +332,7 @@ class ComWeChatChannel(SlaveChannel):
             name = (f"{data['remark']}({data['nickname']})") if data["remark"] else data["nickname"]
 
             self.contacts[contact] = name
-            if data["type"] == 0 or data["type"] == 4 or name == "":
+            if data["type"] == 0 or data["type"] == 4:
                 continue
 
             if "@chatroom" in contact:
