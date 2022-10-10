@@ -217,7 +217,7 @@ class ComWeChatChannel(SlaveChannel):
                     else:
                         if (int(time.time()) - msg["timestamp"]) > self.time_out:
                             msg_type = msg["type"]
-                            msg['message'] = f"{msg_type} 下载超时,请在手机端查看"
+                            msg['message'] = f"[{msg_type} 下载超时,请在手机端查看]"
                             msg["type"] = "text"
                             flag = True
                     

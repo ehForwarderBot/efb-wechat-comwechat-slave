@@ -214,7 +214,10 @@ def efb_share_link_wrapper(text: str) -> Message:
             if showtype == 0: # 消息对话中的(测试的是从公众号转发给好友, 不排除其他情况)
                 title = url = des = thumburl = None # 初始化
                 try:
-                    title = xml.xpath('/msg/appmsg/title/text()')[0]
+                    try:
+                        title = xml.xpath('/msg/appmsg/title/text()')[0]
+                    except:
+                        title = "[xml 消息解析，点击查看详情]"
                     if '<' in title and '>' in title:
                         subs = re.findall('<[\s\S]+?>', title)
                         for sub in subs:
