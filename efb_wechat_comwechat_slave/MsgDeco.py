@@ -292,7 +292,7 @@ def efb_share_link_wrapper(text: str) -> Message:
             result_text += f"{msg_title}\n\n{forward_content}"
             efb_msg = Message(
                 type=MsgType.Text,
-                text= emoji_wechat2telegram(result_text),
+                text= result_text,
                 vendor_specific={ "is_forwarded": True }
             )
         elif type == 21: # 微信运动

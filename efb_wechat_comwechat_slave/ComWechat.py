@@ -133,10 +133,6 @@ class ComWeChatChannel(SlaveChannel):
             sender = msg["sender"]
             wxid  =  msg["wxid"] 
 
-            if msg["type"] == "sysmsg" and "邀请" in msg["message"]:
-                self.GetGroupListBySql()
-                self.GetContactListBySql()
-
             if sender in self.contacts.keys():
                 chatname = self.contacts[sender]
             else:
@@ -173,7 +169,6 @@ class ComWeChatChannel(SlaveChannel):
                 msg["message"] = msg["message"].replace(emoji, WC_EMOTICON_CONVERSION[emoji])
             except:
                 pass
-        
 
         if msg["msgid"] not in self.cache:
             self.cache[msg["msgid"]] = None
@@ -192,6 +187,7 @@ class ComWeChatChannel(SlaveChannel):
 
         if msg["type"] == "voice":
             file_path = re.search("clientmsgid=\"(.*?)\"", msg["message"]).group(1) + ".amr"
+            msg["timestamp"] = int(time.time())
             msg["filepath"] = f'''{self.dir}{msg["self"]}/{file_path}'''
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
