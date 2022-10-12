@@ -53,8 +53,8 @@ class ComWeChatChannel(SlaveChannel):
     logger: logging.Logger = logging.getLogger("comwechat")
     logger.setLevel(logging.DEBUG)
 
-    # MsgType.File , MsgType.Video , MsgType.Animation , MsgType.Voice
-    supported_message_types = {MsgType.Text, MsgType.Sticker, MsgType.Image , MsgType.Link}
+    #MsgType.Voice
+    supported_message_types = {MsgType.Text, MsgType.Sticker, MsgType.Image , MsgType.Link , MsgType.File , MsgType.Video , MsgType.Animation}
 
     def __init__(self, instance_id: InstanceID = None):
         super().__init__(instance_id=instance_id)
@@ -155,11 +155,6 @@ class ComWeChatChannel(SlaveChannel):
             ))
             self.handle_msg(msg, author, chat)
 
-        # @self.bot.on("public_msg")
-        # def on_public_msg(msg : Dict):
-        #     self.logger.debug(f"public_msg:{msg}")
-        #     ...
-
     def handle_msg(self , msg : Dict[str, Any] , author : 'ChatMember' , chat : 'Chat'):
         efb_msgs = []
 
@@ -179,6 +174,12 @@ class ComWeChatChannel(SlaveChannel):
             if ("FileStorage" in msg["filepath"]) and ("Cache" not in msg["filepath"]):
                 msg["timestamp"] = int(time.time())
                 msg["filepath"] = msg["filepath"].replace("\\","/")
+                msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
+                self.file_msg[msg["filepath"]] = ( msg , author , chat )
+                return
+            if msg["type"] == "video":
+                msg["timestamp"] = int(time.time())
+                msg["filepath"] = msg["thumb_path"].replace("\\","/").replace(".jpg", ".mp4")
                 msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
                 self.file_msg[msg["filepath"]] = ( msg , author , chat )
                 return
@@ -283,16 +284,15 @@ class ComWeChatChannel(SlaveChannel):
             except:
                 ...
         elif msg.type in [MsgType.File , MsgType.Video , MsgType.Animation]:
-            ...
-            # name = msg.file.name.replace("/tmp/", "")
-            # local_path = f"{self.dir}{name}"
-            # load_temp_file_to_local(msg.file, local_path)
-            # file_path = self.base_path + "\\" +local_path.split("/")[-1]
-            # self.bot.SendFile(receiver = chat_uid , file_path = file_path)
-            # try:
-            #     os.remove(file_path)
-            # except:
-            #     ...
+            name = msg.file.name.replace("/tmp/", "")
+            local_path = f"{self.dir}{name}"
+            load_temp_file_to_local(msg.file, local_path)
+            file_path = self.base_path + "\\" +local_path.split("/")[-1]
+            self.bot.SendFile(receiver = chat_uid , file_path = file_path)   # {'msg': 0, 'result': 'OK'} SendFail
+            try:
+                os.remove(file_path)
+            except:
+                ...
         return msg
 
     def get_chat_picture(self, chat: 'Chat') -> BinaryIO:
