@@ -124,6 +124,8 @@ class ComWeChatChannel(SlaveChannel):
                     uid= sender,
                     name= name,
             ))
+            if sender.startswith('gh_'):
+                chat.vendor_specific = {'is_mp' : True}
             author = chat.other
             self.handle_msg(msg, author, chat)
             
