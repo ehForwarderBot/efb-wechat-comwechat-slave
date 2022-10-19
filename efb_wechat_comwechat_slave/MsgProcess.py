@@ -76,6 +76,18 @@ def MsgProcess(msg : dict , chat) -> Message:
     elif msg["type"] == "video":
         file = load_local_file_to_temp(msg["filepath"])
         return efb_video_wrapper(file)
+    
+    elif msg["type"] == "unhandled":
+        if "op id='2'" in msg["message"]:
+            return efb_text_simple_wrapper("手机端进入本对话")
+
+    elif msg["type"] == "voip":
+        return efb_unsupported_wrapper("语音/视频聊天\n  - - - - - - - - - - - - - - - \n不支持的消息类型, 请在微信端查看")
+
+    elif msg["type"] == "other":
+        if 'sysmsg type="voipmt"' in msg["message"]:
+            return efb_unsupported_wrapper("收到/取消 群语音邀请")
+
 
     else:
         return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
