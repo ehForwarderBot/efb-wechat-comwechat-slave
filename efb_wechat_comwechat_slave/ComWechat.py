@@ -1,4 +1,5 @@
 import logging, tempfile
+import time
 import threading
 from traceback import print_exc
 from pydub import AudioSegment
@@ -295,6 +296,7 @@ class ComWeChatChannel(SlaveChannel):
             load_temp_file_to_local(msg.file, local_path)
             img_path = self.base_path + "\\" + local_path.split("/")[-1]
             self.bot.SendImage(receiver = chat_uid , img_path = img_path)
+            time.sleep(20)
             try:
                 os.remove(local_path)
             except:
@@ -305,6 +307,7 @@ class ComWeChatChannel(SlaveChannel):
             load_temp_file_to_local(msg.file, local_path)
             file_path = self.base_path + "\\" + self.wxid + "\\tmpfile\\" +local_path.split("/")[-1]
             self.bot.SendFile(receiver = chat_uid , file_path = file_path)   # {'msg': 0, 'result': 'OK'} SendFail
+            time.sleep(20)
             try:
                 os.remove(local_path)
             except:
