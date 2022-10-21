@@ -1,4 +1,5 @@
 import logging, tempfile
+import time
 import threading
 from traceback import print_exc
 from pydub import AudioSegment
@@ -62,6 +63,7 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
         self.dir = self.config["dir"]
+        self.wxid = self.config["wxid"]
         self.bot = WeChatRobot()
         self.base_path = self.bot.get_base_path()
         ChatMgr.slave_channel = self
@@ -294,18 +296,20 @@ class ComWeChatChannel(SlaveChannel):
             load_temp_file_to_local(msg.file, local_path)
             img_path = self.base_path + "\\" + local_path.split("/")[-1]
             self.bot.SendImage(receiver = chat_uid , img_path = img_path)
+            time.sleep(20)
             try:
-                os.remove(img_path)
+                os.remove(local_path)
             except:
                 ...
         elif msg.type in [MsgType.File , MsgType.Video , MsgType.Animation]:
             name = msg.file.name.replace("/tmp/", "")
-            local_path = f"{self.dir}{name}"
+            local_path = f"{self.dir}{self.wxid}/tmpfile/{name}"
             load_temp_file_to_local(msg.file, local_path)
-            file_path = self.base_path + "\\" +local_path.split("/")[-1]
+            file_path = self.base_path + "\\" + self.wxid + "\\tmpfile\\" +local_path.split("/")[-1]
             self.bot.SendFile(receiver = chat_uid , file_path = file_path)   # {'msg': 0, 'result': 'OK'} SendFail
+            time.sleep(20)
             try:
-                os.remove(file_path)
+                os.remove(local_path)
             except:
                 ...
         return msg
