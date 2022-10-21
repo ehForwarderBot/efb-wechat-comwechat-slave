@@ -54,7 +54,7 @@ class ComWeChatChannel(SlaveChannel):
     logger.setLevel(logging.DEBUG)
 
     #MsgType.Voice
-    supported_message_types = {MsgType.Text, MsgType.Sticker, MsgType.Image , MsgType.Link , MsgType.File , MsgType.Video , MsgType.Animation}
+    supported_message_types = {MsgType.Text, MsgType.Sticker, MsgType.Image , MsgType.Link , MsgType.File , MsgType.Video , MsgType.Animation, MsgType.Voice}
 
     def __init__(self, instance_id: InstanceID = None):
         super().__init__(instance_id=instance_id)
@@ -128,6 +128,8 @@ class ComWeChatChannel(SlaveChannel):
             ))
             if sender.startswith('gh_'):
                 chat.vendor_specific = {'is_mp' : True}
+                self.logger.debug(f'modified_chat:{chat}')
+            self.logger.debug(f'no_modified_chat:{chat}')
             author = chat.other
             self.handle_msg(msg, author, chat)
             
@@ -274,6 +276,15 @@ class ComWeChatChannel(SlaveChannel):
 
         if msg.edit:
             pass  # todo
+
+        if msg.type == MsgType.Voice:
+            self.logger.debug("msg.file.name="+msg.file.name)
+            f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
+            AudioSegment.from_ogg(msg.file.name).export(f, format="mp3")
+            self.logger.debug("msg.file.new.name="+f.name)
+            msg.file = f
+            msg.file.name = f.name
+            msg.type = MsgType.Video
         
         if msg.type in [MsgType.Text , MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
