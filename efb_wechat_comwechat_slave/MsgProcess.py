@@ -11,10 +11,10 @@ from lxml import etree
 from ehforwarderbot import utils as efb_utils
 from ehforwarderbot.message import Message
 
+logging.basicConfig(format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt='%Y-%m-%d:%H:%M:%S',level=logging.DEBUG)
 logger :logging.Logger = logging.getLogger(__name__)
 
 def MsgProcess(msg : dict , chat) -> Message:
-
     if msg["type"] == "text":
         # at_list = {}
         # if "[@at," in msg['message']:

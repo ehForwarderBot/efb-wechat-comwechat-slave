@@ -32,7 +32,7 @@ from .Utils import download_file , load_config , load_temp_file_to_local , WC_EM
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
-    channel_emoji : str = "💻"
+    channel_emoji : str = ""
     channel_id : str = "honus.comwechat"
 
     bot : WeChatRobot = None
@@ -61,7 +61,7 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("ComWeChat Slave Channel initialized.")
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
-        self.dir = self.config["dir"]
+        self.dir = os.path.expanduser(self.config["dir"])
         self.bot = WeChatRobot()
         self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
         self.base_path = self.bot.get_base_path()
@@ -71,6 +71,9 @@ class ComWeChatChannel(SlaveChannel):
         def on_self_msg(msg : Dict):
             self.logger.debug(f"self_msg:{msg}")
             sender = msg["sender"]
+
+            if msg["type"]=='unhandled':
+                return
 
             try:
                 name = self.contacts[sender] if self.contacts[sender] else sender
@@ -214,6 +217,7 @@ class ComWeChatChannel(SlaveChannel):
             if len(self.file_msg) == 0:
                 time.sleep(1)
             else:
+                time.sleep(1) # wait file to download
                 for path in list(self.file_msg.keys()):
                     flag = False
                     msg = self.file_msg[path][0]
@@ -239,6 +243,7 @@ class ComWeChatChannel(SlaveChannel):
                         if efb_msg.file:
                             efb_msg.file.close()
 
+            # delete file after send it 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
                     file_path = k
