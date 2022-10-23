@@ -77,7 +77,7 @@ def MsgProcess(msg : dict , chat) -> Message:
         file = load_local_file_to_temp(msg["filepath"])
         return efb_video_wrapper(file)
     
-    elif msg["type"] == "unhandled":
+    elif msg["type"].startswith("unhandled"):
         if "op id='2'" in msg["message"]:
             return efb_text_simple_wrapper("手机端进入本对话")
 

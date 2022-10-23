@@ -25,7 +25,7 @@ from ehforwarderbot.exceptions import EFBException
 from ehforwarderbot.message import MessageCommand, MessageCommands
 
 from .ChatMgr import ChatMgr
-from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember
+from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
 from .MsgDeco import efb_text_simple_wrapper
 from .MsgProcess import MsgProcess
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
@@ -163,6 +163,28 @@ class ComWeChatChannel(SlaveChannel):
             ))
             self.handle_msg(msg, author, chat)
 
+    def system_msg(self, msg):
+        self.logger.debug(f"system_msg:{msg}")
+        sender = msg["sender"]
+        name  =  msg["name"]
+
+        if sender in self.contacts.keys():
+            chatname = self.contacts[sender]
+        else:
+            chatname = sender
+
+        chat = ChatMgr.build_efb_chat_as_system_user(EFBSystemUser(
+            uid = sender,
+            name = name
+        ))
+
+        try:
+            author = chat.get_member(SystemChatMember.SYSTEM_ID)
+        except KeyError:
+            author = chat.add_system_member()
+
+        self.handle_msg(msg, author, chat)
+
     def handle_msg(self , msg : Dict[str, Any] , author : 'ChatMember' , chat : 'Chat'):
         efb_msgs = []
 
@@ -288,7 +310,16 @@ class ComWeChatChannel(SlaveChannel):
             msg.file.name = f.name
             msg.type = MsgType.Video
         
-        if msg.type in [MsgType.Text , MsgType.Link]:
+        if msg.type in [MsgType.Text]:
+            if msg.text.startswith('/changename'):
+                newname = msg.text.strip('/changename ')
+                self.bot.SetChatroomName(chatroom_id = chat_uid , chatroom_name = newname)
+            elif msg.text.startswith('/getmemberlist'):
+                memberlist = self.bot.GetChatroomMemberList(chatroom_id = chat_uid)
+                self.system_msg({'sender':chat_uid, 'name':'system_user', 'type':'text', 'message':str(memberlist), 'msgid':"{uni_id}".format(uni_id=str(int(time.time())))})
+            else:
+                self.bot.SendText(wxid = chat_uid , msg = msg.text)
+        elif msg.type in [MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Image , MsgType.Sticker]:
             name = msg.file.name.replace("/tmp/", "")
