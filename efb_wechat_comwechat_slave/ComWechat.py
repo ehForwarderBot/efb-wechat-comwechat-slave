@@ -46,9 +46,8 @@ class ComWeChatChannel(SlaveChannel):
     
     time_out : int = 120
     cache =  TTLCache(maxsize=200, ttl= time_out)  # 缓存发送过的消息ID
-    file_msg : Dict = {}                     # 存储待修改的文件类消息 {path : msg}
-
-
+    file_msg : Dict = {}                           # 存储待修改的文件类消息 {path : msg}
+    delete_file : Dict = {}                         # 存储待删除的消息 {path : time}
 
     __version__ = version.__version__
     logger: logging.Logger = logging.getLogger("comwechat")
@@ -63,8 +62,8 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
         self.dir = self.config["dir"]
-        self.wxid = self.config["wxid"]
         self.bot = WeChatRobot()
+        self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
         self.base_path = self.bot.get_base_path()
         ChatMgr.slave_channel = self
 
@@ -236,7 +235,6 @@ class ComWeChatChannel(SlaveChannel):
         while True:
             if len(self.file_msg) == 0:
                 time.sleep(1)
-                continue
             else:
                 for path in list(self.file_msg.keys()):
                     flag = False
@@ -262,6 +260,17 @@ class ComWeChatChannel(SlaveChannel):
                         coordinator.send_message(efb_msg)
                         if efb_msg.file:
                             efb_msg.file.close()
+
+            if len(self.delete_file):
+                for k in list(self.delete_file.keys()):
+                    file_path = k
+                    begin_time = self.delete_file[k]
+                    if  (int(time.time()) - begin_time) > self.time_out:
+                        try:
+                            os.remove(file_path)
+                        except:
+                            pass
+                        del self.delete_file[file_path]  
 
     # 定时任务
     def scheduled_job(self , t_event):
@@ -302,10 +311,8 @@ class ComWeChatChannel(SlaveChannel):
             pass  # todo
 
         if msg.type == MsgType.Voice:
-            self.logger.debug("msg.file.name="+msg.file.name)
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
             AudioSegment.from_ogg(msg.file.name).export(f, format="mp3")
-            self.logger.debug("msg.file.new.name="+f.name)
             msg.file = f
             msg.file.name = f.name
             msg.type = MsgType.Video
@@ -321,28 +328,21 @@ class ComWeChatChannel(SlaveChannel):
                 self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
+
         elif msg.type in [MsgType.Image , MsgType.Sticker]:
             name = msg.file.name.replace("/tmp/", "")
-            local_path = f"{self.dir}{name}"
+            local_path =f"{self.dir}{self.wxid}/{name}"
             load_temp_file_to_local(msg.file, local_path)
-            img_path = self.base_path + "\\" + local_path.split("/")[-1]
+            img_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
             self.bot.SendImage(receiver = chat_uid , img_path = img_path)
-            time.sleep(20)
-            try:
-                os.remove(local_path)
-            except:
-                ...
+            self.delete_file[local_path] = int(time.time())
         elif msg.type in [MsgType.File , MsgType.Video , MsgType.Animation]:
             name = msg.file.name.replace("/tmp/", "")
-            local_path = f"{self.dir}{self.wxid}/tmpfile/{name}"
+            local_path = f"{self.dir}{self.wxid}/{name}"
             load_temp_file_to_local(msg.file, local_path)
-            file_path = self.base_path + "\\" + self.wxid + "\\tmpfile\\" +local_path.split("/")[-1]
+            file_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
             self.bot.SendFile(receiver = chat_uid , file_path = file_path)   # {'msg': 0, 'result': 'OK'} SendFail
-            time.sleep(20)
-            try:
-                os.remove(local_path)
-            except:
-                ...
+            self.delete_file[local_path] = int(time.time())
         return msg
 
     def get_chat_picture(self, chat: 'Chat') -> BinaryIO:

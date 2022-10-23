@@ -96,7 +96,7 @@ def load_local_file_to_temp(file : str) -> tempfile:
 
 def load_temp_file_to_local(file : tempfile , path : str) -> None:
     """
-    从临时文件读取文件到本地
+    从临时文件写到本地
     """
     with open(path , 'wb') as f:
         f.write(file.read())
