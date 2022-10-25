@@ -8,6 +8,7 @@ import os
 
 import re
 import time
+import simplejson
 from ehforwarderbot.chat import PrivateChat , SystemChatMember
 from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
@@ -165,12 +166,9 @@ class ComWeChatChannel(SlaveChannel):
     def system_msg(self, msg):
         self.logger.debug(f"system_msg:{msg}")
         sender = msg["sender"]
-        name  =  msg["name"]
+        name  = 'system' 
+        msg["msgid"] = int(time.time())
 
-        if sender in self.contacts.keys():
-            chatname = self.contacts[sender]
-        else:
-            chatname = sender
 
         chat = ChatMgr.build_efb_chat_as_system_user(EFBSystemUser(
             uid = sender,
@@ -322,8 +320,32 @@ class ComWeChatChannel(SlaveChannel):
                 newname = msg.text.strip('/changename ')
                 self.bot.SetChatroomName(chatroom_id = chat_uid , chatroom_name = newname)
             elif msg.text.startswith('/getmemberlist'):
-                memberlist = self.bot.GetChatroomMemberList(chatroom_id = chat_uid)
-                self.system_msg({'sender':chat_uid, 'name':'system_user', 'type':'text', 'message':str(memberlist), 'msgid':"{uni_id}".format(uni_id=str(int(time.time())))})
+                message = simplejson.dumps(self.bot.GetChatroomMemberList(chatroom_id = chat_uid))
+                self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
+            elif msg.text.startswith('/getstaticinfo'):
+                info = msg.text[15::]
+                if info == 'friends':
+                    message = str(self.friends)
+                elif info == 'groups':
+                    message = str(self.groups)
+                elif info == 'group_members':
+                    #message = ",".join(self.info)
+                    message = simplejson.dumps(self.group_members)
+                elif info == 'contacts':
+                    message = simplejson.dumps(self.contacts)
+                else:
+                    message = 'Not Found'
+                self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
+            elif msg.text.startswith('/search'):
+                keyword = msg.text[8::]
+                message = 'result:'
+                for key, value in self.contacts.items():
+                    if keyword in value:
+                        message += '\n' + str(key) + ":" + str(value)
+                self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
+            elif msg.text.startswith('/addtogroup'):
+                users = msg.text[12::]
+                self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
             else:
                 self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Link]:

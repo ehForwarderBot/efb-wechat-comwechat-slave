@@ -87,6 +87,12 @@ def MsgProcess(msg : dict , chat) -> Message:
     elif msg["type"] == "other":
         if 'sysmsg type="voipmt"' in msg["message"]:
             return efb_unsupported_wrapper("收到/取消 群语音邀请")
+        elif '<sysmsg type="delchatroommember">' in msg['message']:
+            xml = etree.fromstring(msg['message'])
+            content = xml.xpath('//plain/text()')[0].strip("<![CDATA[").strip("]]>")
+            return efb_text_simple_wrapper(content)
+        else:
+            return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
 
 
     else:
