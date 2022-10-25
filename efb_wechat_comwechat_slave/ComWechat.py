@@ -48,7 +48,7 @@ class ComWeChatChannel(SlaveChannel):
     time_out : int = 120
     cache =  TTLCache(maxsize=200, ttl= time_out)  # 缓存发送过的消息ID
     file_msg : Dict = {}                           # 存储待修改的文件类消息 {path : msg}
-    delete_file : Dict = {}                         # 存储待删除的消息 {path : time}
+    delete_file : Dict = {}                        # 存储待删除的消息 {path : time}
 
     __version__ = version.__version__
     logger: logging.Logger = logging.getLogger("comwechat")
@@ -114,9 +114,6 @@ class ComWeChatChannel(SlaveChannel):
             try:
                 name = self.contacts[sender]
             except KeyError:
-                # self.GetGroupListBySql()
-                # self.GetContactListBySql()
-                # name = self.contacts[sender]
 
                 data = self.bot.GetContactBySql(wxid = sender)
                 if data:
@@ -366,7 +363,6 @@ class ComWeChatChannel(SlaveChannel):
                 self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
-
         elif msg.type in [MsgType.Image , MsgType.Sticker]:
             name = msg.file.name.replace("/tmp/", "")
             local_path =f"{self.dir}{self.wxid}/{name}"
