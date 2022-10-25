@@ -85,7 +85,7 @@ def MsgProcess(msg : dict , chat) -> Message:
         return efb_unsupported_wrapper("语音/视频聊天\n  - - - - - - - - - - - - - - - \n不支持的消息类型, 请在微信端查看")
 
     elif msg["type"] == "other":
-        if 'sysmsg type="voipmt"' in msg["message"]:
+        if 'sysmsg type="voipmt"' in msg["message"] or 'sysmsg type="multivoip"' in msg["message"]:
             return efb_unsupported_wrapper("收到/取消 群语音邀请")
         elif '<sysmsg type="delchatroommember">' in msg['message']:
             xml = etree.fromstring(msg['message'])
