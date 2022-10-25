@@ -169,6 +169,7 @@ class ComWeChatChannel(SlaveChannel):
         name  = 'system' 
         msg["msgid"] = int(time.time())
 
+
         chat = ChatMgr.build_efb_chat_as_system_user(EFBSystemUser(
             uid = sender,
             name = name
