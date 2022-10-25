@@ -320,7 +320,23 @@ class ComWeChatChannel(SlaveChannel):
                 newname = msg.text.strip('/changename ')
                 self.bot.SetChatroomName(chatroom_id = chat_uid , chatroom_name = newname)
             elif msg.text.startswith('/getmemberlist'):
-                message = simplejson.dumps(self.bot.GetChatroomMemberList(chatroom_id = chat_uid))
+                #try:
+                #    message = simplejson.dumps(self.group_members[chat_uid])
+                #except:
+                #    pass
+                #if len(message) == 0: 
+                #    message = simplejson.dumps(self.bot.GetChatroomMemberList(chatroom_id = chat_uid))
+                memberlist = self.bot.GetChatroomMemberList(chatroom_id = chat_uid)
+                message = '群组成员包括：'
+                for wxid in memberlist['members'].split('^G'):
+                    try:
+                        name = self.contacts[wxid]
+                    except:
+                        try:
+                            name = self.bot.GetChatroomMemberNickname(chatroom_id = chat_uid, wxid = wxid)
+                        except:
+                            name = wxid
+                    message += '\n' + wxid + ':' + name
                 self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
             elif msg.text.startswith('/getstaticinfo'):
                 info = msg.text[15::]
@@ -334,7 +350,7 @@ class ComWeChatChannel(SlaveChannel):
                 elif info == 'contacts':
                     message = simplejson.dumps(self.contacts)
                 else:
-                    message = 'Not Found'
+                    message = '当前仅支持查询friends, groups, group_members, contacts'
                 self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
             elif msg.text.startswith('/search'):
                 keyword = msg.text[8::]
