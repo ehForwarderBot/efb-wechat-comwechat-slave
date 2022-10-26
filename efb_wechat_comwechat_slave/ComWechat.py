@@ -359,6 +359,9 @@ class ComWeChatChannel(SlaveChannel):
             elif msg.text.startswith('/addtogroup'):
                 users = msg.text[12::]
                 self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
+            elif msg.text.startswith('/at'):
+                users = msg.text[4::]
+                self.bot.SendAt(chatroom_id = chat_uid, wxids = users, msg = '')
             else:
                 self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Link]:
