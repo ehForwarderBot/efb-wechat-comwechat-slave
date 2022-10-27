@@ -45,11 +45,8 @@ def MsgProcess(msg : dict , chat) -> Message:
     elif msg["type"] == "sysmsg":
         if "<revokemsg>" in msg["message"]:
             return efb_text_simple_wrapper(msg['message'].replace("<revokemsg>","").replace("</revokemsg>",""))
-        # 修改群名为 | 收到红包 | 拍了拍 | 邀请 | 与群里其他人都不是朋友关系，请注意隐私安全 | 对方未添加你为朋友。对方添加后，才能进行通话 |
-        if "修改群名为" in msg["message"] or "收到红包" in msg["message"] or "拍了拍" in msg["message"] or "邀请" in msg["message"] or "与群里其他人都不是朋友关系，请注意隐私安全" in msg["message"] or "对方未添加你为朋友" in msg["message"] or "移出" in msg["message"]:
-                return efb_text_simple_wrapper(msg['message'])
-        else:  # 暂时用于分析，后继取消
-            return efb_text_simple_wrapper("sys_msg :" + str(msg['message']))
+        # 修改群名为 | 收到红包 | 拍了拍 | 邀请 | 与群里其他人都不是朋友关系，请注意隐私安全 | 对方未添加你为朋友。对方添加后，才能进行通话 | 通过扫描
+        return efb_text_simple_wrapper("sys_msg :" + str(msg['message']))
 
     elif msg["type"] == "image":
         file = wechatimagedecode(msg["filepath"])
@@ -77,7 +74,7 @@ def MsgProcess(msg : dict , chat) -> Message:
         file = load_local_file_to_temp(msg["filepath"])
         return efb_video_wrapper(file)
     
-    elif msg["type"].startswith("unhandled"):
+    elif msg["type"] == "unhandled":
         if "op id='2'" in msg["message"]:
             return efb_text_simple_wrapper("手机端进入本对话")
         else:
@@ -101,7 +98,6 @@ def MsgProcess(msg : dict , chat) -> Message:
             return efb_unsupported_wrapper(content + str(id))
         else:
             return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
-
 
     else:
         return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
