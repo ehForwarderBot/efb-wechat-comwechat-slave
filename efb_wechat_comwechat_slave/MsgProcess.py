@@ -90,6 +90,12 @@ def MsgProcess(msg : dict , chat) -> Message:
             xml = etree.fromstring(msg['message'])
             content = xml.xpath('//plain/text()')[0].strip("<![CDATA[").strip("]]>")
             return efb_text_simple_wrapper(content)
+        elif 'sysmsg type="revokemsg"' in msg['message']:
+            xml = etree.fromstring(msg['message'])
+            id = xml.xpath('//newmsgid/text()')[0]
+            #content = xml.xpath('//replacemsg/text()')[0].strip("<![CDATA[").strip("]]>")
+            content = '消息已撤回'
+            return efb_unsupported_wrapper(content + str(id))
         else:
             return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
 

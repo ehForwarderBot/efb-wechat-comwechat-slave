@@ -333,7 +333,7 @@ class ComWeChatChannel(SlaveChannel):
                             name = self.bot.GetChatroomMemberNickname(chatroom_id = chat_uid, wxid = wxid)
                         except:
                             name = wxid
-                    message += '\n' + wxid + ':' + name
+                    message += '\n' + wxid + ' : ' + name
                 self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
             elif msg.text.startswith('/getstaticinfo'):
                 info = msg.text[15::]
@@ -354,7 +354,7 @@ class ComWeChatChannel(SlaveChannel):
                 message = 'result:'
                 for key, value in self.contacts.items():
                     if keyword in value:
-                        message += '\n' + str(key) + ":" + str(value)
+                        message += '\n' + str(key) + " : " + str(value)
                 self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
             elif msg.text.startswith('/addtogroup'):
                 users = msg.text[12::]
