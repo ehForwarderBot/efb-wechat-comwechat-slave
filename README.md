@@ -7,6 +7,8 @@
 
 /getmemberlist - 查看群组用户wxid
 
+/at - 后面跟wxid，多个用英文,隔开。
+
 /changename - 修改群组名称
 
 /getstaticinfo - 可获取friends, groups, contacts信息
