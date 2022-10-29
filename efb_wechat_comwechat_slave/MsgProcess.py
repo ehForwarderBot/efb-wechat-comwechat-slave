@@ -77,8 +77,10 @@ def MsgProcess(msg : dict , chat) -> Message:
     elif msg["type"].startswith("unhandled"):
         if "op id='2'" in msg["message"]:
             return efb_text_simple_wrapper("手机端进入本对话")
+        elif "op id=\'11\'" in msg["message"]:
+            return efb_text_simple_wrapper("HandOffMaster")
         else:
-            efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
+            return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
 
     elif msg["type"] == "voip":
         return efb_unsupported_wrapper("语音/视频聊天\n  - - - - - - - - - - - - - - - \n不支持的消息类型, 请在微信端查看")
