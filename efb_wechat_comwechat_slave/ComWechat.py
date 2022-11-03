@@ -8,7 +8,7 @@ import os
 
 import re
 import time
-import simplejson
+import json
 from ehforwarderbot.chat import PrivateChat , SystemChatMember
 from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
@@ -369,9 +369,9 @@ class ComWeChatChannel(SlaveChannel):
                 elif info == 'groups':
                     message = str(self.groups)
                 elif info == 'group_members':
-                    message = simplejson.dumps(self.group_members)
+                    message = json.dumps(self.group_members)
                 elif info == 'contacts':
-                    message = simplejson.dumps(self.contacts)
+                    message = json.dumps(self.contacts)
                 else:
                     message = '当前仅支持查询friends, groups, group_members, contacts'
                 self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
