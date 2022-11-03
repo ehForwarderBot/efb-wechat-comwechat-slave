@@ -144,9 +144,10 @@ def efb_share_link_wrapper(text: str) -> Message:
     //appmsg/type = 36 : 京东农场
     //appmsg/type = 51 : 视频（微信视频号分享）
     //appmsg/type = 53 : 转账过期退还通知
-    //appmsg/type = 57 : 【感谢 @honus 提供样本 xml】引用(回复)消息，未细致研究哪个参数是被引用的消息 id 
+    //appmsg/type = 57 : 引用(回复)消息，未细致研究哪个参数是被引用的消息 id 
     //appmsg/type = 63 : 直播（微信视频号分享）
     //appmsg/type = 74 : 文件 (收到文件的第一个提示)
+    //appmsg/type = 87 : 群公告
     //appmsg/type = 2000 : 转账
     :param text: The content of the message
     :return: EFB Message
@@ -416,6 +417,13 @@ def efb_share_link_wrapper(text: str) -> Message:
                 text=result_text,
                 vendor_specific={ "is_mp": True }
             )
+        elif type == 87: # 群公告
+            title = xml.xpath('/msg/appmsg/textannouncement/text()')[0]
+            efb_msg = Message(
+                type=MsgType.Text,
+                text= f"[群公告]:\n{title}" ,
+                vendor_specific={ "is_mp": False }
+            )
         elif type == 2000:
             subtype = xml.xpath("/msg/appmsg/wcpayinfo/paysubtype/text()")[0]
             money =  xml.xpath("/msg/appmsg/wcpayinfo/feedesc/text()")[0].strip("<![CDATA[").strip("]]>")
@@ -445,10 +453,12 @@ def efb_share_link_wrapper(text: str) -> Message:
 
 def efb_location_wrapper(msg: str) -> Message:
     efb_msg = Message()
-    '''msg = ast.literal_eval(text)'''
-    efb_msg.text = msg['desc']
-    efb_msg.attributes = LocationAttribute(latitude=float(msg['x']),
-                                           longitude=float(msg['y']))
+    label = re.search('''label="(.*?)"''', msg).group(1)
+    x = re.search('''x="(.*?)"''', msg).group(1)
+    y = re.search('''y="(.*?)"''', msg).group(1)
+    efb_msg.text = label
+    efb_msg.attributes = LocationAttribute(latitude=float(x),
+                                           longitude=float(y))
     efb_msg.type = MsgType.Location
     return efb_msg
 

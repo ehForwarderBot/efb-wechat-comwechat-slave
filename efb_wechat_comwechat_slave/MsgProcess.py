@@ -11,42 +11,26 @@ from lxml import etree
 from ehforwarderbot import utils as efb_utils
 from ehforwarderbot.message import Message
 
-logger :logging.Logger = logging.getLogger(__name__)
-
 def MsgProcess(msg : dict , chat) -> Message:
 
     if msg["type"] == "text":
-        # at_list = {}
-        # if "[@at," in msg['message']:
-        #     text = msg['msg']
-        #     at = re.findall(r"\[@at,(.+?)\]",text)
-        #     content = re.sub(r'\[@at,nickname=(.+?)\]','',text)
-        #     temp_msg = ""
-        #     for each_people in list(set(at)):
-        #         nickname = re.findall("^nickname=(.+),wxid",each_people)
-        #         wxid = re.findall("wxid=(.+)$",each_people)
-        #         if len(nickname)!=0:
-        #             for i in nickname:
-        #                 temp_msg += "@"+ i
-        #         if len(wxid)!=0:
-        #             for i in wxid:
-        #                 if i == msg['robot_wxid']:
-        #                     begin_index = len(temp_msg)
-        #                     temp_msg += ' @me'
-        #                     end_index = len(temp_msg)
-        #                     at_list[(begin_index, end_index)] = chat.self
-        #     temp_msg += ' ' + (content.strip())
-        #     msg['msg'] = temp_msg
-        
-        # if at_list:
-        #     return efb_text_simple_wrapper(msg['msg'] , at_list)
+        at_list = {}
+        try:
+            if "<atuserlist>" in msg["extrainfo"]:
+                at_user = re.search("<atuserlist>(.*)<\/atuserlist>", msg["extrainfo"]).group(1)
+                if msg["self"] in at_user:
+                    msg["message"] = "@me " + msg["message"]
+                    at_list[(0 , 4)] = chat.self
+        except:
+            ...
+        if at_list:
+            return efb_text_simple_wrapper(msg['message'] , at_list)
         return efb_text_simple_wrapper(msg['message'])
 
     elif msg["type"] == "sysmsg":
-        if "<revokemsg>" in msg["message"]:
-            return efb_text_simple_wrapper(msg['message'].replace("<revokemsg>","").replace("</revokemsg>",""))
-        # 修改群名为 | 收到红包 | 拍了拍 | 邀请 | 与群里其他人都不是朋友关系，请注意隐私安全 | 对方未添加你为朋友。对方添加后，才能进行通话 | 通过扫描
-        return efb_text_simple_wrapper("sys_msg :" + str(msg['message']))
+        if "<revokemsg>" in msg["message"]:  # 重复的撤回通知，不在此处处理
+            return                            
+        return efb_text_simple_wrapper(msg['message'])
 
     elif msg["type"] == "image":
         file = wechatimagedecode(msg["filepath"])
@@ -74,32 +58,31 @@ def MsgProcess(msg : dict , chat) -> Message:
         file = load_local_file_to_temp(msg["filepath"])
         return efb_video_wrapper(file)
     
-    elif msg["type"].startswith("unhandled"):
-        if "op id='2'" in msg["message"]:
-            return efb_text_simple_wrapper("手机端进入本对话")
-        elif "op id=\'11\'" in msg["message"]:
-            return efb_text_simple_wrapper("HandOffMaster")
-        else:
-            return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
+    elif msg["type"] == "location":
+        return efb_location_wrapper(msg["message"])
 
     elif msg["type"] == "voip":
-        return efb_unsupported_wrapper("语音/视频聊天\n  - - - - - - - - - - - - - - - \n不支持的消息类型, 请在微信端查看")
+        if "<status>1</status>" in msg["message"]:
+            return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n语音邀请")
+        if "<status>2</status>" in msg["message"]:
+            return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n语音挂断")
 
     elif msg["type"] == "other":
         if 'sysmsg type="voipmt"' in msg["message"] or 'sysmsg type="multivoip"' in msg["message"]:
-            return efb_unsupported_wrapper("收到/取消 群语音邀请")
+            return efb_unsupported_wrapper("[收到/取消 群语音邀请]")
         elif '<sysmsg type="delchatroommember">' in msg['message']:
             xml = etree.fromstring(msg['message'])
             content = xml.xpath('//plain/text()')[0].strip("<![CDATA[").strip("]]>")
             return efb_text_simple_wrapper(content)
-        elif 'sysmsg type="revokemsg"' in msg['message']:
-            xml = etree.fromstring(msg['message'])
-            id = xml.xpath('//newmsgid/text()')[0]
-            #content = xml.xpath('//replacemsg/text()')[0].strip("<![CDATA[").strip("]]>")
-            content = '消息已撤回'
-            return efb_unsupported_wrapper(content + str(id))
+        elif "群公告" in msg["message"] and "群待办" in msg["message"]:
+            return efb_text_simple_wrapper("[发布了群待办]")
+        elif "<mmchatroombarannouncememt>" in msg["message"]:
+            ...
         else:
             return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
+
+    elif msg["type"] == "phone":
+        return
 
     else:
         return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
