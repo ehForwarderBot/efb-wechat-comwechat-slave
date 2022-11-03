@@ -24,6 +24,7 @@ from ehforwarderbot.types import MessageID, ChatID, InstanceID
 from ehforwarderbot import utils as efb_utils
 from ehforwarderbot.exceptions import EFBException
 from ehforwarderbot.message import MessageCommand, MessageCommands
+from ehforwarderbot.status import MessageRemoval
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
@@ -79,6 +80,8 @@ class ComWeChatChannel(SlaveChannel):
                 data = self.bot.GetContactBySql(wxid = sender)
                 if data:
                     name = data[3]
+                    if name == "":
+                        name = sender
                 else:
                     name = sender
 
@@ -104,20 +107,14 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"friend_msg:{msg}")
             sender = msg['sender']
 
-            if msg["type"] == "eventnotify":
-                # 临时处理
-                sender = msg["self"]
-                msg["type"] = "text"
-                msg["msgid"] = int(time.time())
-                msg["message"] = "[系统消息，请在客户端查看]"
-
             try:
                 name = self.contacts[sender]
             except KeyError:
-
                 data = self.bot.GetContactBySql(wxid = sender)
                 if data:
                     name = data[3]
+                    if name == "":
+                        name = sender
                 else:
                     name = sender
 
@@ -128,7 +125,6 @@ class ComWeChatChannel(SlaveChannel):
             if sender.startswith('gh_'):
                 chat.vendor_specific = {'is_mp' : True}
                 self.logger.debug(f'modified_chat:{chat}')
-            self.logger.debug(f'no_modified_chat:{chat}')
             author = chat.other
             self.handle_msg(msg, author, chat)
             
@@ -140,6 +136,8 @@ class ComWeChatChannel(SlaveChannel):
 
             if sender in self.contacts.keys():
                 chatname = self.contacts[sender]
+                if chatname == "":
+                    chatname = sender
             else:
                 chatname = sender
                 
@@ -159,6 +157,38 @@ class ComWeChatChannel(SlaveChannel):
                 alias = self.group_members.get(sender,{}).get(wxid , None),
             ))
             self.handle_msg(msg, author, chat)
+
+        @self.bot.on("revoke_msg")
+        def on_revoked_msg(msg : Dict):
+            self.logger.debug(f"revoke_msg:{msg}")
+            sender = msg["sender"]
+            if "@chatroom" in sender:
+                wxid  =  msg["wxid"] 
+
+            if sender in self.contacts.keys():
+                chatname = self.contacts[sender]
+                if chatname == "":
+                    chatname = sender
+            else:
+                chatname = sender
+
+            if "@chatroom" in sender:
+                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
+                    uid = sender,
+                    name = chatname,
+                ))
+            else:
+                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                    uid = sender,
+                    name = chatname,
+                ))
+
+            newmsgid = re.search("<newmsgid>(.*?)<\/newmsgid>", msg["message"]).group(1)
+
+            efb_msg = Message(chat = chat , uid = newmsgid)
+            coordinator.send_status(
+                MessageRemoval(source_channel=self, destination_channel=coordinator.master, message=efb_msg)
+            )
 
     def system_msg(self, msg):
         self.logger.debug(f"system_msg:{msg}")
@@ -218,6 +248,8 @@ class ComWeChatChannel(SlaveChannel):
             return
 
         efb_msg = MsgProcess(msg , chat)
+        if not efb_msg:
+            return
         efb_msg.author = author
         efb_msg.chat = chat
         efb_msg.uid = msg["msgid"]
@@ -268,15 +300,16 @@ class ComWeChatChannel(SlaveChannel):
                         del self.delete_file[file_path]  
 
     # 定时任务
-    def scheduled_job(self , t_event):
-        interval = 1800
-        
-        self.GetGroupListBySql()
-        self.GetContactListBySql()
-
-        if t_event is not None and not t_event.is_set():
-            self.scheduled = threading.Timer(interval, self.scheduled_job, [t_event])
-            self.scheduled.start()
+    def scheduled_job(self):
+        count = 1
+        while True: 
+            time.sleep(1)
+            if count % 1800 == 0:
+                self.GetGroupListBySql()
+                self.GetContactListBySql()
+                count = 1
+            else:
+                count += 1
 
     #获取全部联系人
     def get_chats(self) -> Collection['Chat']:
@@ -317,12 +350,6 @@ class ComWeChatChannel(SlaveChannel):
                 newname = msg.text.strip('/changename ')
                 self.bot.SetChatroomName(chatroom_id = chat_uid , chatroom_name = newname)
             elif msg.text.startswith('/getmemberlist'):
-                #try:
-                #    message = simplejson.dumps(self.group_members[chat_uid])
-                #except:
-                #    pass
-                #if len(message) == 0: 
-                #    message = simplejson.dumps(self.bot.GetChatroomMemberList(chatroom_id = chat_uid))
                 memberlist = self.bot.GetChatroomMemberList(chatroom_id = chat_uid)
                 message = '群组成员包括：'
                 for wxid in memberlist['members'].split('^G'):
@@ -342,7 +369,6 @@ class ComWeChatChannel(SlaveChannel):
                 elif info == 'groups':
                     message = str(self.groups)
                 elif info == 'group_members':
-                    #message = ",".join(self.info)
                     message = simplejson.dumps(self.group_members)
                 elif info == 'contacts':
                     message = simplejson.dumps(self.contacts)
@@ -391,8 +417,9 @@ class ComWeChatChannel(SlaveChannel):
             return None
 
     def poll(self):
-        timer = threading.Event()
-        self.scheduled_job(timer)
+        timer = threading.Thread(target = self.scheduled_job)
+        timer.daemon = True
+        timer.start()
 
         self.bot.run(main_thread = False)
 
@@ -401,13 +428,13 @@ class ComWeChatChannel(SlaveChannel):
         t.start()
 
     def send_status(self, status: 'Status'):
-        pass
+        ...
 
     def stop_polling(self):
-        pass
+        ...
 
     def get_message_by_id(self, chat: 'Chat', msg_id: MessageID) -> Optional['Message']:
-        pass
+        ...
 
     #定时更新 Start
     def GetContactListBySql(self):
