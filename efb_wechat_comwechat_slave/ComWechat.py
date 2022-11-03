@@ -399,12 +399,19 @@ class ComWeChatChannel(SlaveChannel):
             img_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
             self.bot.SendImage(receiver = chat_uid , img_path = img_path)
             self.delete_file[local_path] = int(time.time())
-        elif msg.type in [MsgType.File , MsgType.Video , MsgType.Animation]:
+        elif msg.type in [MsgType.File , MsgType.Video]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{self.wxid}/{name}"
             load_temp_file_to_local(msg.file, local_path)
             file_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
             self.bot.SendFile(receiver = chat_uid , file_path = file_path)   # {'msg': 0, 'result': 'OK'} SendFail
+            self.delete_file[local_path] = int(time.time())
+        elif msg.type in [MsgType.Animation]:
+            name = msg.file.name.replace("/tmp/", "")
+            local_path = f"{self.dir}{self.wxid}/{name}"
+            load_temp_file_to_local(msg.file, local_path)
+            file_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
+            self.bot.SendEmotion(wxid = chat_uid , img_path = file_path)
             self.delete_file[local_path] = int(time.time())
         return msg
 
