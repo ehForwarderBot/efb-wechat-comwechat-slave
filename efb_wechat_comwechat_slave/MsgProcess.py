@@ -15,11 +15,14 @@ def MsgProcess(msg : dict , chat) -> Message:
 
     if msg["type"] == "text":
         at_list = {}
-        if "<atuserlist>" in msg["extrainfo"]:
-            at_user = re.search("<atuserlist>(.*)<\/atuserlist>", msg["extrainfo"]).group(1)
-            if msg["self"] in at_user:
-                msg["message"] = "@me " + msg["message"]
-                at_list[(0 , 4)] = chat.self
+        try:
+            if "<atuserlist>" in msg["extrainfo"]:
+                at_user = re.search("<atuserlist>(.*)<\/atuserlist>", msg["extrainfo"]).group(1)
+                if msg["self"] in at_user:
+                    msg["message"] = "@me " + msg["message"]
+                    at_list[(0 , 4)] = chat.self
+        except:
+            ...
         if at_list:
             return efb_text_simple_wrapper(msg['message'] , at_list)
         return efb_text_simple_wrapper(msg['message'])
