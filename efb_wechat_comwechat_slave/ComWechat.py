@@ -107,6 +107,9 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"friend_msg:{msg}")
             sender = msg['sender']
 
+            if msg["type"] == "eventnotify":
+                return
+
             try:
                 name = self.contacts[sender]
             except KeyError:
