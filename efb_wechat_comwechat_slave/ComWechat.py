@@ -535,6 +535,8 @@ class ComWeChatChannel(SlaveChannel):
             self.delete_file[local_path] = int(time.time())
             if msg.text:
                 res = self.bot.SendText(wxid = chat_uid , msg = msg.text)
+            if msg.type == MsgType.Video:
+                res["msg"] = 1
         elif msg.type in [MsgType.Animation]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{self.wxid}/{name}"
