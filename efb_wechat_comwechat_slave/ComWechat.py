@@ -521,7 +521,7 @@ class ComWeChatChannel(SlaveChannel):
             res = self.bot.SendImage(receiver = chat_uid , img_path = img_path)
             self.delete_file[local_path] = int(time.time())
             if msg.text:
-                res = self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.File , MsgType.Video]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{self.wxid}/{name}"
@@ -534,7 +534,7 @@ class ComWeChatChannel(SlaveChannel):
             res = self.bot.SendFile(receiver = chat_uid , file_path = file_path)
             self.delete_file[local_path] = int(time.time())
             if msg.text:
-                res = self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                self.bot.SendText(wxid = chat_uid , msg = msg.text)
             if msg.type == MsgType.Video:
                 res["msg"] = 1
         elif msg.type in [MsgType.Animation]:
@@ -545,7 +545,7 @@ class ComWeChatChannel(SlaveChannel):
             res = self.bot.SendEmotion(wxid = chat_uid , img_path = file_path)
             self.delete_file[local_path] = int(time.time())
             if msg.text:
-                res = self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                self.bot.SendText(wxid = chat_uid , msg = msg.text)
 
         try:
             if str(res["msg"]) == "0":
