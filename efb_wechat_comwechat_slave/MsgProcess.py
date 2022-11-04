@@ -60,6 +60,9 @@ def MsgProcess(msg : dict , chat) -> Message:
     
     elif msg["type"] == "location":
         return efb_location_wrapper(msg["message"])
+    
+    elif msg["type"] == "qqmail":
+        return efb_qqmail_wrapper(msg["message"])
 
     elif msg["type"] == "voip":
         if "<status>1</status>" in msg["message"]:
