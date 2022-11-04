@@ -487,8 +487,6 @@ def efb_qqmail_wrapper(text: str) -> Message:
     )
     return efb_msg
 
-
-
 def efb_miniprogram_wrapper(text: str) -> Message:
     xml = etree.fromstring(text)
     result_text = ""

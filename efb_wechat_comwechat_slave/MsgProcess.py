@@ -52,7 +52,7 @@ def MsgProcess(msg : dict , chat) -> Message:
 
     elif msg["type"] == "voice":
         file = convert_silk_to_mp3(load_local_file_to_temp(msg["filepath"]))
-        return efb_voice_wrapper(file)
+        return efb_voice_wrapper(file , file.name + ".ogg")
 
     elif msg["type"] == "video":
         file = load_local_file_to_temp(msg["filepath"])
@@ -77,7 +77,9 @@ def MsgProcess(msg : dict , chat) -> Message:
         elif "群公告" in msg["message"] and "群待办" in msg["message"]:
             return efb_text_simple_wrapper("[发布了群待办]")
         elif "<mmchatroombarannouncememt>" in msg["message"]:
-            ...
+            return
+        elif '<sysmsg type="functionmsg">' in msg['message']:
+            return
         else:
             return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
 

@@ -8,7 +8,7 @@ import os
 
 import re
 import time
-import simplejson
+import json
 from ehforwarderbot.chat import PrivateChat , SystemChatMember
 from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
@@ -193,9 +193,8 @@ class ComWeChatChannel(SlaveChannel):
     def system_msg(self, msg):
         self.logger.debug(f"system_msg:{msg}")
         sender = msg["sender"]
-        name  = 'system' 
+        name  = '\u2139 System' 
         msg["msgid"] = int(time.time())
-
 
         chat = ChatMgr.build_efb_chat_as_system_user(EFBSystemUser(
             uid = sender,
@@ -336,7 +335,7 @@ class ComWeChatChannel(SlaveChannel):
         chat_uid = msg.chat.uid
 
         if msg.edit:
-            pass  # todo
+            pass     # todo
 
         if msg.type == MsgType.Voice:
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
@@ -344,11 +343,12 @@ class ComWeChatChannel(SlaveChannel):
             msg.file = f
             msg.file.name = f.name
             msg.type = MsgType.Video
+            msg.filename = f.name.split("/")[-1]
         
         if msg.type in [MsgType.Text]:
             if msg.text.startswith('/changename'):
                 newname = msg.text.strip('/changename ')
-                self.bot.SetChatroomName(chatroom_id = chat_uid , chatroom_name = newname)
+                res = self.bot.SetChatroomName(chatroom_id = chat_uid , chatroom_name = newname)
             elif msg.text.startswith('/getmemberlist'):
                 memberlist = self.bot.GetChatroomMemberList(chatroom_id = chat_uid)
                 message = '群组成员包括：'
@@ -369,9 +369,9 @@ class ComWeChatChannel(SlaveChannel):
                 elif info == 'groups':
                     message = str(self.groups)
                 elif info == 'group_members':
-                    message = simplejson.dumps(self.group_members)
+                    message = json.dumps(self.group_members)
                 elif info == 'contacts':
-                    message = simplejson.dumps(self.contacts)
+                    message = json.dumps(self.contacts)
                 else:
                     message = '当前仅支持查询friends, groups, group_members, contacts'
                 self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
@@ -384,12 +384,12 @@ class ComWeChatChannel(SlaveChannel):
                 self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
             elif msg.text.startswith('/addtogroup'):
                 users = msg.text[12::]
-                self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
+                res = self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
             elif msg.text.startswith('/at'):
                 users = msg.text[4::]
-                self.bot.SendAt(chatroom_id = chat_uid, wxids = users, msg = '')
+                res = self.bot.SendAt(chatroom_id = chat_uid, wxids = users, msg = '')
             else:
-                self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                res = self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Image , MsgType.Sticker]:
@@ -397,22 +397,32 @@ class ComWeChatChannel(SlaveChannel):
             local_path =f"{self.dir}{self.wxid}/{name}"
             load_temp_file_to_local(msg.file, local_path)
             img_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
-            self.bot.SendImage(receiver = chat_uid , img_path = img_path)
+            res = self.bot.SendImage(receiver = chat_uid , img_path = img_path)
             self.delete_file[local_path] = int(time.time())
         elif msg.type in [MsgType.File , MsgType.Video]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{self.wxid}/{name}"
             load_temp_file_to_local(msg.file, local_path)
             file_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
-            self.bot.SendFile(receiver = chat_uid , file_path = file_path)   # {'msg': 0, 'result': 'OK'} SendFail
+            if msg.filename:
+                os.rename(local_path , f"{self.dir}{self.wxid}/{msg.filename}")
+                local_path = f"{self.dir}{self.wxid}/{msg.filename}"
+                file_path = self.base_path + "\\" + self.wxid + "\\" + msg.filename
+            res = self.bot.SendFile(receiver = chat_uid , file_path = file_path)                   # {'msg': 0, 'result': 'OK'} SendFail
             self.delete_file[local_path] = int(time.time())
         elif msg.type in [MsgType.Animation]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{self.wxid}/{name}"
             load_temp_file_to_local(msg.file, local_path)
             file_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
-            self.bot.SendEmotion(wxid = chat_uid , img_path = file_path)
+            res = self.bot.SendEmotion(wxid = chat_uid , img_path = file_path)
             self.delete_file[local_path] = int(time.time())
+
+        try:
+            if str(res["msg"]) == "0":
+                self.system_msg({'sender':chat_uid, 'type':'text', 'message':"发送失败，请在手机端确认"})
+        except:
+            ...
         return msg
 
     def get_chat_picture(self, chat: 'Chat') -> BinaryIO:
