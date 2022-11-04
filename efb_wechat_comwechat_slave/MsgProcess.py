@@ -84,6 +84,8 @@ def MsgProcess(msg : dict , chat) -> Message:
             return
         elif '<sysmsg type="ClientCheckConsistency">' in msg['message']:
             return
+        elif '<sysmsg type="pat">' in msg["message"]:
+            return
         else:
             return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
 
