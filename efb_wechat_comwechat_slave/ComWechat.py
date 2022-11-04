@@ -336,7 +336,7 @@ class ComWeChatChannel(SlaveChannel):
         chat_uid = msg.chat.uid
 
         if msg.edit:
-            pass  # todo
+            pass     # todo
 
         if msg.type == MsgType.Voice:
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
@@ -404,7 +404,11 @@ class ComWeChatChannel(SlaveChannel):
             local_path = f"{self.dir}{self.wxid}/{name}"
             load_temp_file_to_local(msg.file, local_path)
             file_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
-            self.bot.SendFile(receiver = chat_uid , file_path = file_path)   # {'msg': 0, 'result': 'OK'} SendFail
+            if msg.filename:
+                os.rename(local_path , f"{self.dir}{self.wxid}/{msg.filename}")
+                local_path = f"{self.dir}{self.wxid}/{msg.filename}"
+                file_path = self.base_path + "\\" + self.wxid + "\\" + msg.filename
+            self.bot.SendFile(receiver = chat_uid , file_path = file_path)                   # {'msg': 0, 'result': 'OK'} SendFail
             self.delete_file[local_path] = int(time.time())
         elif msg.type in [MsgType.Animation]:
             name = msg.file.name.replace("/tmp/", "")
