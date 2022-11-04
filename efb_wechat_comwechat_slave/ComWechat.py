@@ -107,6 +107,9 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"friend_msg:{msg}")
             sender = msg['sender']
 
+            if msg["type"] == "eventnotify":
+                return
+
             try:
                 name = self.contacts[sender]
             except KeyError:
@@ -190,23 +193,128 @@ class ComWeChatChannel(SlaveChannel):
                 MessageRemoval(source_channel=self, destination_channel=coordinator.master, message=efb_msg)
             )
 
-    def system_msg(self, msg):
-        self.logger.debug(f"system_msg:{msg}")
-        sender = msg["sender"]
-        name  = '\u2139 System' 
-        msg["msgid"] = int(time.time())
+        @self.bot.on("transfer_msg")
+        def on_transfer_msg(msg : Dict):
+            self.logger.debug(f"transfer_msg:{msg}")
+            sender = msg["sender"]
+            
+            if msg["isSendMsg"]:
+                if msg["isSendByPhone"]:
+                    try:
+                        name = self.contacts[sender]
+                    except KeyError:
+                        data = self.bot.GetContactBySql(wxid = sender)
+                        if data:
+                            name = data[3]
+                            if name == "":
+                                name = sender
+                        else:
+                            name = sender
 
+                    chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                            uid= sender,
+                            name= name,
+                    ))
+                    author = chat.other
+                    self.handle_msg(msg, author, chat)
+                    return
+
+            content = {}
+
+            try:
+                name = self.contacts[sender]
+            except KeyError:
+                data = self.bot.GetContactBySql(wxid = sender)
+                if data:
+                    name = data[3]
+                    if name == "":
+                        name = sender
+                else:
+                    name = sender
+
+            money = re.search("收到转账(.*)元", msg["message"]).group(1)
+            transcationid = re.search("<transcationid><!\[CDATA\[(.*)\]\]><\/transcationid>", msg["message"]).group(1)
+            transferid = re.search("<transferid><!\[CDATA\[(.*)\]\]><\/transferid>", msg["message"]).group(1)
+            text = (
+                f"收到 {name} 转账\n"
+                "金额为 :\n"
+                f"{money}"
+            )
+
+            commands = [
+                MessageCommand(
+                    name=("Accept"),
+                    callable_name="process_transfer",
+                    kwargs={"transcationid" : transcationid , "transferid" : transferid , "wxid" : sender},
+                )
+            ]
+
+            content["sender"] = sender
+            content["message"] = text
+            content["commands"] = commands
+            content["name"] = name
+            self.system_msg(content)
+
+        @self.bot.on("frdver_msg")
+        def on_frdver_msg(msg : Dict):
+            self.logger.debug(f"frdver_msg:{msg}")
+            content = {}
+            sender = msg["sender"]
+            fromnickname = re.search('fromnickname="(.*?)"', msg["message"]).group(1)
+            apply_content = re.search('content="(.*?)"', msg["message"]).group(1)
+            url = re.search('bigheadimgurl="(.*?)"', msg["message"]).group(1)
+            v3 = re.search('encryptusername="(v3.*?)"', msg["message"]).group(1)
+            v4 = re.search('ticket="(v4.*?)"', msg["message"]).group(1)
+            text = (
+                "好友申请:\n"
+                f"名字: {fromnickname}\n"
+                f"验证内容: {apply_content}\n"
+                f"头像: {url}"
+            )
+
+            commands = [
+                MessageCommand(
+                    name=("Accept"),
+                    callable_name="process_friend_request",
+                    kwargs={"v3" : v3 , "v4" : v4},
+                )
+            ]
+
+            content["sender"] = sender
+            content["message"] = text
+            content["commands"] = commands
+            self.system_msg(content)
+
+    def system_msg(self, content : Dict):
+        self.logger.debug(f"system_msg:{content}")
+        msg = Message()
+        sender = content["sender"]
+        if "name" in content:
+            name = content["name"]
+        else:
+            name  = '\u2139 System' 
+        
         chat = ChatMgr.build_efb_chat_as_system_user(EFBSystemUser(
             uid = sender,
             name = name
         ))
-
+        
         try:
             author = chat.get_member(SystemChatMember.SYSTEM_ID)
         except KeyError:
             author = chat.add_system_member()
+        
+        if "commands" in content:
+            msg.commands = MessageCommands(content["commands"])
+        if "message" in content:
+            msg.text = content['message']
 
-        self.handle_msg(msg, author, chat)
+        msg.uid = int(time.time())
+        msg.chat = chat
+        msg.author = author
+        msg.deliver_to = coordinator.master
+        msg.type = MsgType.Text
+        coordinator.send_message(msg)
 
     def handle_msg(self , msg : Dict[str, Any] , author : 'ChatMember' , chat : 'Chat'):
         efb_msgs = []
@@ -219,9 +327,10 @@ class ComWeChatChannel(SlaveChannel):
                 pass
 
         if msg["msgid"] not in self.cache:
-            self.cache[msg["msgid"]] = None
+            self.cache[msg["msgid"]] = msg["type"]
         else:
-            return
+            if self.cache[msg["msgid"]] == msg["type"]:
+                return
 
         try:
             if ("FileStorage" in msg["filepath"]) and ("Cache" not in msg["filepath"]):
@@ -298,6 +407,21 @@ class ComWeChatChannel(SlaveChannel):
                             pass
                         del self.delete_file[file_path]  
 
+    def process_friend_request(self , v3 , v4):
+        self.logger.debug(f"process_friend_request:{v3} {v4}")
+        res = self.bot.VerifyApply(v3 = v3 , v4 = v4)
+        if str(res['msg']) != "0":
+            return "Success"
+        else:
+            return "Failed" 
+
+    def process_transfer(self, transcationid , transferid , wxid):
+        res = self.bot.GetTransfer(transcationid = transcationid , transferid = transferid , wxid = wxid)
+        if str(res["msg"]) != "0":
+            return "Success"
+        else:
+            return "Failed"
+
     # 定时任务
     def scheduled_job(self):
         count = 1
@@ -361,7 +485,7 @@ class ComWeChatChannel(SlaveChannel):
                         except:
                             name = wxid
                     message += '\n' + wxid + ' : ' + name
-                self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
+                self.system_msg({'sender':chat_uid, 'message':message})
             elif msg.text.startswith('/getstaticinfo'):
                 info = msg.text[15::]
                 if info == 'friends':
@@ -374,14 +498,14 @@ class ComWeChatChannel(SlaveChannel):
                     message = json.dumps(self.contacts)
                 else:
                     message = '当前仅支持查询friends, groups, group_members, contacts'
-                self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
+                self.system_msg({'sender':chat_uid, 'message':message})
             elif msg.text.startswith('/search'):
                 keyword = msg.text[8::]
                 message = 'result:'
                 for key, value in self.contacts.items():
                     if keyword in value:
                         message += '\n' + str(key) + " : " + str(value)
-                self.system_msg({'sender':chat_uid, 'type':'text', 'message':message})
+                self.system_msg({'sender':chat_uid, 'message':message})
             elif msg.text.startswith('/addtogroup'):
                 users = msg.text[12::]
                 res = self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
@@ -399,6 +523,8 @@ class ComWeChatChannel(SlaveChannel):
             img_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
             res = self.bot.SendImage(receiver = chat_uid , img_path = img_path)
             self.delete_file[local_path] = int(time.time())
+            if msg.text:
+                self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.File , MsgType.Video]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{self.wxid}/{name}"
@@ -408,8 +534,12 @@ class ComWeChatChannel(SlaveChannel):
                 os.rename(local_path , f"{self.dir}{self.wxid}/{msg.filename}")
                 local_path = f"{self.dir}{self.wxid}/{msg.filename}"
                 file_path = self.base_path + "\\" + self.wxid + "\\" + msg.filename
-            res = self.bot.SendFile(receiver = chat_uid , file_path = file_path)                   # {'msg': 0, 'result': 'OK'} SendFail
+            res = self.bot.SendFile(receiver = chat_uid , file_path = file_path)
             self.delete_file[local_path] = int(time.time())
+            if msg.text:
+                self.bot.SendText(wxid = chat_uid , msg = msg.text)
+            if msg.type == MsgType.Video:
+                res["msg"] = 1
         elif msg.type in [MsgType.Animation]:
             name = msg.file.name.replace("/tmp/", "")
             local_path = f"{self.dir}{self.wxid}/{name}"
@@ -417,10 +547,12 @@ class ComWeChatChannel(SlaveChannel):
             file_path = self.base_path + "\\" + self.wxid + "\\" + local_path.split("/")[-1]
             res = self.bot.SendEmotion(wxid = chat_uid , img_path = file_path)
             self.delete_file[local_path] = int(time.time())
+            if msg.text:
+                self.bot.SendText(wxid = chat_uid , msg = msg.text)
 
         try:
             if str(res["msg"]) == "0":
-                self.system_msg({'sender':chat_uid, 'type':'text', 'message':"发送失败，请在手机端确认"})
+                self.system_msg({'sender':chat_uid, 'message':"发送失败，请在手机端确认"})
         except:
             ...
         return msg

@@ -13,7 +13,7 @@ exec(open('efb_wechat_comwechat_slave/__version__.py').read())
 setup(
     name="efb-wechat-comwechat-slave",
     version=__version__,
-    description='EFB Slave for WeChat on CuteCat iHttp plugin',
+    description='EFB Slave for WeChat on ComWeChat',
     author='honus',
     author_email="honusmr@gmail.com",
     url="https://github.com/0honus0/efb-wechat-comwechat-slave",
@@ -21,7 +21,7 @@ setup(
     python_requires='>=3.7',
     keywords=["wechat", ],
     install_requires=[
-        "wechatrobot",
+        "python-comwechatrobot-http",
         "ehforwarderbot",
         "PyYaml>=5.3",
         "cachetools",
