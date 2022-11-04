@@ -21,7 +21,7 @@ setup(
     python_requires='>=3.7',
     keywords=["wechat", ],
     install_requires=[
-        "wechatrobot",
+        "python-comwechatrobot-http",
         "ehforwarderbot",
         "PyYaml>=5.3",
         "cachetools",
