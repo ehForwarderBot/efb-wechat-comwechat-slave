@@ -48,13 +48,13 @@ jobs:
         context: ./
         push: true
         tags: |
-          ${{ secrets.DOCKER_USERNAME }}/ehforwarderbot:latest
-          ghcr.io/${{ github.repository_owner }}/ehforwarderbot:latest
+          ${{ secrets.DOCKER_USERNAME }}/efb-wechat-comwechat-slave:latest
+          ghcr.io/${{ github.repository_owner }}/efb-wechat-comwechat-slave:latest
 
     - name: Docker Hub Description
       uses: peter-evans/dockerhub-description@v3
-      env:
+      with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        repository: honus/efb-wechat-comwechat-slave
+        repository: ${{ secrets.DOCKER_USERNAME }}/efb-wechat-comwechat-slave
         readme-filepath: README.md
