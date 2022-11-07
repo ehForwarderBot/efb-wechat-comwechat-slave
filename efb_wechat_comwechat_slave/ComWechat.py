@@ -74,16 +74,7 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"self_msg:{msg}")
             sender = msg["sender"]
 
-            try:
-                name = self.contacts[sender] if self.contacts[sender] else sender
-            except:
-                data = self.bot.GetContactBySql(wxid = sender)
-                if data:
-                    name = data[3]
-                    if name == "":
-                        name = sender
-                else:
-                    name = sender
+            name = self.get_name_by_wxid(sender)
 
             if "@chatroom" in sender:
                 chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
@@ -105,21 +96,13 @@ class ComWeChatChannel(SlaveChannel):
         @self.bot.on("friend_msg")
         def on_friend_msg(msg : Dict):
             self.logger.debug(f"friend_msg:{msg}")
+            
             sender = msg['sender']
 
             if msg["type"] == "eventnotify":
                 return
 
-            try:
-                name = self.contacts[sender]
-            except KeyError:
-                data = self.bot.GetContactBySql(wxid = sender)
-                if data:
-                    name = data[3]
-                    if name == "":
-                        name = sender
-                else:
-                    name = sender
+            name = self.get_name_by_wxid(sender)
 
             chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid= sender,
@@ -137,12 +120,7 @@ class ComWeChatChannel(SlaveChannel):
             sender = msg["sender"]
             wxid  =  msg["wxid"] 
 
-            if sender in self.contacts.keys():
-                chatname = self.contacts[sender]
-                if chatname == "":
-                    chatname = sender
-            else:
-                chatname = sender
+            chatname = self.get_name_by_wxid(sender)
                 
             chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
                 uid = sender,
@@ -168,22 +146,17 @@ class ComWeChatChannel(SlaveChannel):
             if "@chatroom" in sender:
                 wxid  =  msg["wxid"] 
 
-            if sender in self.contacts.keys():
-                chatname = self.contacts[sender]
-                if chatname == "":
-                    chatname = sender
-            else:
-                chatname = sender
+            name = self.get_name_by_wxid(sender)
 
             if "@chatroom" in sender:
                 chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
                     uid = sender,
-                    name = chatname,
+                    name = name,
                 ))
             else:
                 chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid = sender,
-                    name = chatname,
+                    name = name,
                 ))
 
             newmsgid = re.search("<newmsgid>(.*?)<\/newmsgid>", msg["message"]).group(1)
@@ -197,20 +170,10 @@ class ComWeChatChannel(SlaveChannel):
         def on_transfer_msg(msg : Dict):
             self.logger.debug(f"transfer_msg:{msg}")
             sender = msg["sender"]
-            
+            name = self.get_name_by_wxid(sender)
+
             if msg["isSendMsg"]:
                 if msg["isSendByPhone"]:
-                    try:
-                        name = self.contacts[sender]
-                    except KeyError:
-                        data = self.bot.GetContactBySql(wxid = sender)
-                        if data:
-                            name = data[3]
-                            if name == "":
-                                name = sender
-                        else:
-                            name = sender
-
                     chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                             uid= sender,
                             name= name,
@@ -221,24 +184,12 @@ class ComWeChatChannel(SlaveChannel):
 
             content = {}
 
-            try:
-                name = self.contacts[sender]
-            except KeyError:
-                data = self.bot.GetContactBySql(wxid = sender)
-                if data:
-                    name = data[3]
-                    if name == "":
-                        name = sender
-                else:
-                    name = sender
-
             money = re.search("收到转账(.*)元", msg["message"]).group(1)
             transcationid = re.search("<transcationid><!\[CDATA\[(.*)\]\]><\/transcationid>", msg["message"]).group(1)
             transferid = re.search("<transferid><!\[CDATA\[(.*)\]\]><\/transferid>", msg["message"]).group(1)
             text = (
-                f"收到 {name} 转账\n"
-                "金额为 :\n"
-                f"{money}"
+                f"收到 {name} 转账:\n"
+                "金额为 {money} 元\n"
             )
 
             commands = [
@@ -283,6 +234,54 @@ class ComWeChatChannel(SlaveChannel):
             content["sender"] = sender
             content["message"] = text
             content["commands"] = commands
+            self.system_msg(content)
+
+        @self.bot.on("card_msg")
+        def on_card_msg(msg : Dict):
+            self.logger.debug(f"card_msg:{msg}")
+            sender = msg["sender"]
+            wxid = msg["wxid"]
+            content = {}
+            name = self.get_name_by_wxid(sender)
+
+            bigheadimgurl = re.search('bigheadimgurl="(.*?)"', msg["message"]).group(1)
+            nickname = re.search('nickname="(.*?)"', msg["message"]).group(1)
+            province = re.search('province="(.*?)"', msg["message"]).group(1)
+            city = re.search('city="(.*?)"', msg["message"]).group(1)
+            sex = re.search('sex="(.*?)"', msg["message"]).group(1)
+            username = re.search('username="(.*?)"', msg["message"]).group(1)
+
+            text = "名片信息:\n"
+            if nickname:
+                text += f"昵称: {nickname}\n"
+            if city:
+                text += f"城市: {city}\n"
+            if province:
+                text += f"省份: {province}\n"
+            if sex:
+                if sex == "0":
+                    text += "性别: 未知\n"
+                elif sex == "1":
+                    text += "性别: 男\n"
+                elif sex == "2":
+                    text += "性别: 女\n"
+            if bigheadimgurl:
+                text += f"头像: {bigheadimgurl}\n"
+
+            commands = [
+                MessageCommand(
+                    name=("Add To Friend"),
+                    callable_name="add_friend",
+                    kwargs={"v3" : username},
+                )
+            ]
+
+            content["sender"] = sender
+            content["message"] = text
+            content["name"] = name
+            # if "v3" in username:
+            #     content["commands"] = commands
+            # 暂时屏蔽
             self.system_msg(content)
 
     def system_msg(self, content : Dict):
@@ -418,6 +417,13 @@ class ComWeChatChannel(SlaveChannel):
     def process_transfer(self, transcationid , transferid , wxid):
         res = self.bot.GetTransfer(transcationid = transcationid , transferid = transferid , wxid = wxid)
         if str(res["msg"]) != "0":
+            return "Success"
+        else:
+            return "Failed"
+
+    def add_friend(self , v3):
+        res = self.bot.AddContactByV3(v3 = v3 , msg = "")
+        if str(res['msg']) != "0":
             return "Success"
         else:
             return "Failed"
@@ -584,6 +590,21 @@ class ComWeChatChannel(SlaveChannel):
 
     def get_message_by_id(self, chat: 'Chat', msg_id: MessageID) -> Optional['Message']:
         ...
+
+    def get_name_by_wxid(self, wxid):
+        try:
+            name = self.contacts[wxid]
+            if name == "":
+                name = sender
+        except:
+            data = self.bot.GetContactBySql(wxid = wxid)
+            if data:
+                name = data[3]
+                if name == "":
+                    name = wxid
+            else:
+                name = wxid
+        return name
 
     #定时更新 Start
     def GetContactListBySql(self):

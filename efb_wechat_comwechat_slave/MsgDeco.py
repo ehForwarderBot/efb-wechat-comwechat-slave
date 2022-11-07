@@ -2,7 +2,7 @@ from typing import Mapping, Tuple, Union, IO
 import magic
 from lxml import etree
 from traceback import print_exc
-import re
+import re , json
 
 from ehforwarderbot import MsgType, Chat
 from ehforwarderbot.chat import ChatMember
@@ -23,22 +23,6 @@ def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union
     if ats:
         efb_msg.substitutions = Substitutions(ats)
     return efb_msg
-
-def efb_text_delete_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union[Chat, ChatMember]], None] = None) -> Message:
-    """
-    A simple EFB message wrapper for plain text. Emojis are presented as is (plain text).
-    :param text: The content of the message
-    :param ats: The substitutions of at messages, must follow the Substitution format when not None
-                [[begin_index, end_index], {Chat or ChatMember}]
-    :return: EFB Message
-    """
-    efb_msg = Message(
-        type=MsgType.Text,
-        text=text,
-        attributes={'parse_mode': 'Markdown'}
-    )
-    return efb_msg
-
 
 def efb_image_wrapper(file: IO, filename: str = None, text: str = None) -> Message:
     """
@@ -185,7 +169,7 @@ def efb_share_link_wrapper(text: str) -> Message:
                     attributes=attribute,
                     type=MsgType.Link,
                     text= None,
-                    vendor_specific={ "is_mp": True }
+                    vendor_specific={ "is_mp": False }
                 )
             except:
                 pass
@@ -545,3 +529,55 @@ def efb_voice_wrapper(file: IO, filename: str = None, text: str = None) -> Messa
     if text:
         efb_msg.text = text
     return efb_msg
+
+def efb_other_wrapper(text: str) -> Union[Message, None]:
+    """
+    A simple EFB message wrapper for other message
+    :param text: The content of the message
+    :return: EFB Message or None
+    """
+
+    xml = etree.fromstring(text)
+    efb_msg = None
+    try:
+        msg_type = xml.xpath('/sysmsg/@type')[0]
+    except:
+        return None
+
+    if msg_type == "NewXmlAddForcePush":
+        userIcon = xml.xpath('/sysmsg/userIcon/text()')[0]
+        desc = xml.xpath('/sysmsg/description/text()')[0]
+
+        extinfo = json.loads(xml.xpath('/sysmsg/extInfo/text()')[0])
+        auth_icon_url = extinfo["auth_icon_url"]
+        nickname = extinfo["nickname"]
+
+        attribute = LinkAttribute(
+            title = nickname,
+            description = desc,
+            url = auth_icon_url ,
+            image = userIcon
+        )
+        efb_msg = Message(
+            attributes=attribute,
+            type=MsgType.Link,
+            text= None,
+            vendor_specific={ "is_mp": False }
+        )
+    elif msg_type == "voipmt" or msg_type == "multivoip":
+        if "banner" in text:
+            return None
+        efb_msg = efb_text_simple_wrapper("[收到/取消 语音邀请]")
+    elif msg_type == "delchatroommember":
+        content = xml.xpath('//plain/text()')[0]
+        efb_msg = efb_text_simple_wrapper(content)
+    elif msg_type == "roomtoolstips":
+        if str(xml.xpath('/sysmsg/todo/op/text()')[0]) == "0":
+            efb_msg = efb_text_simple_wrapper("[发布了群待办]")
+        elif str(xml.xpath('/sysmsg/todo/op/text()')[0]) == "1":
+            efb_msg = efb_text_simple_wrapper("[撤回了群待办]")
+
+    if efb_msg:
+        return efb_msg
+    else:
+        return None
