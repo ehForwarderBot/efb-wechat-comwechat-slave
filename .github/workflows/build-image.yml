@@ -4,10 +4,9 @@ name: Build and push ehforwarderbot Docker image
 # events but only for the master branch
 on:
   workflow_dispatch:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  release:
+    types: [published]
+
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -57,5 +56,5 @@ jobs:
       env:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        repository: ${{ secrets.DOCKER_USERNAME }}/ehforwarderbot
+        repository: honus/efb-wechat-comwechat-slave
         readme-filepath: README.md
