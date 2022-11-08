@@ -1,3 +1,9 @@
+[教程地址](https://blog.honus.top/2022/10/15/580.html)
+
+```docker
+docker pull honus/efb-wechat-comwechat-slave:latest
+```
+
 部分已经支持的命令：
 
 ```

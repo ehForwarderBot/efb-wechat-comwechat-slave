@@ -69,30 +69,12 @@ def MsgProcess(msg : dict , chat) -> Message:
             return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n语音邀请")
         if "<status>2</status>" in msg["message"]:
             return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n语音挂断")
+        if '<voipmsg type="VoIPBubbleMsg"><VoIPBubbleMsg><msg>' in msg["message"]:
+            content = re.search("<msg><!\[CDATA\[(.*?)\]\]></msg>", msg["message"]).group(1)
+            return efb_text_simple_wrapper(f"[{content}]")
 
     elif msg["type"] == "other":
-        if 'sysmsg type="voipmt"' in msg["message"] or 'sysmsg type="multivoip"' in msg["message"]:
-            return efb_unsupported_wrapper("[收到/取消 群语音邀请]")
-        elif '<sysmsg type="delchatroommember">' in msg['message']:
-            xml = etree.fromstring(msg['message'])
-            content = xml.xpath('//plain/text()')[0].strip("<![CDATA[").strip("]]>")
-            return efb_text_simple_wrapper(content)
-        elif "群公告" in msg["message"] and "群待办" in msg["message"]:
-            return efb_text_simple_wrapper("[发布了群待办]")
-        elif "<mmchatroombarannouncememt>" in msg["message"]:
-            return
-        elif '<sysmsg type="functionmsg">' in msg['message']:
-            return
-        elif '<sysmsg type="modtextstatus">' in msg['message']:
-            return
-        elif '<sysmsg type="ClientCheckConsistency">' in msg['message']:
-            return
-        elif '<sysmsg type="pat">' in msg["message"]:
-            return
-        elif '<sysmsg type="gamecenter">' in msg["message"]:
-            return
-        else:
-            return efb_text_simple_wrapper("Unsupported message type: " + msg['type'] + "\n" + str(msg))
+        return efb_other_wrapper(msg["message"])
 
     elif msg["type"] == "phone":
         return
