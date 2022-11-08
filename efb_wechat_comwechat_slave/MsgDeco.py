@@ -576,6 +576,9 @@ def efb_other_wrapper(text: str) -> Union[Message, None]:
             efb_msg = efb_text_simple_wrapper("[发布了群待办]")
         elif str(xml.xpath('/sysmsg/todo/op/text()')[0]) == "1":
             efb_msg = efb_text_simple_wrapper("[撤回了群待办]")
+    elif msg_type == "paymsg":
+        if "待接收" in text and "转账" in text:
+            efb_msg = efb_text_simple_wrapper("[你有一笔待接收的转账]")
 
     if efb_msg:
         return efb_msg
