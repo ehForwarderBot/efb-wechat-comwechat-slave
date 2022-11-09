@@ -112,10 +112,10 @@ def efb_share_link_wrapper(text: str) -> Message:
     处理msgType49消息 - 复合xml, xml 中 //appmsg/type 指示具体消息类型.
     /msg/appmsg/type
     已知：
-    //appmsg/type = 1 : 至少包含百度网盘分享
+    //appmsg/type = 1 : 百度网盘分享
     //appmsg/type = 2 : 微信运动
     //appmsg/type = 3 : 音乐分享
-    //appmsg/type = 4 : 至少包含小红书分享
+    //appmsg/type = 4 : 小红书分享
     //appmsg/type = 5 : 链接（公众号文章）
     //appmsg/type = 6 : 文件 （收到文件的第二个提示【文件下载完成】)，也有可能 msgType = 10000 【【提示文件有风险】没有任何有用标识，无法判断是否与前面哪条消息有关联】
     //appmsg/type = 8 : 未解析图片消息
@@ -125,7 +125,7 @@ def efb_share_link_wrapper(text: str) -> Message:
     //appmsg/type = 24 : 从收藏中分享的笔记
     //appmsg/type = 33 : 美团外卖
     //appmsg/type = 35 : 消息同步
-    //appmsg/type = 36 : 京东农场
+    //appmsg/type = 36 : 京东农场，滴滴打车
     //appmsg/type = 51 : 视频（微信视频号分享）
     //appmsg/type = 53 : 转账过期退还通知
     //appmsg/type = 57 : 引用(回复)消息，未细致研究哪个参数是被引用的消息 id 
@@ -173,9 +173,12 @@ def efb_share_link_wrapper(text: str) -> Message:
                 )
             except:
                 pass
-        elif type in [ 4 , 36 ]: # 至少包含小红书分享 , 京东农场
+        elif type in [ 4 , 36 ]: # 至少包含小红书分享 , 京东农场 , 滴滴打车
             title = xml.xpath('/msg/appmsg/title/text()')[0]
-            des = xml.xpath('/msg/appmsg/des/text()')[0]
+            try:
+                des = xml.xpath('/msg/appmsg/des/text()')[0]
+            except:
+                des = ""
             url = xml.xpath('/msg/appmsg/url/text()')[0]
             app = xml.xpath('/msg/appinfo/appname/text()')[0]
             description = f"{des}\n---- from {app}"
@@ -334,7 +337,7 @@ def efb_share_link_wrapper(text: str) -> Message:
                 type=MsgType.Text,
                 text= '系统消息 : 消息同步',
                 vendor_specific={ "is_mp": False }
-            )
+            )  
         elif type == 40: # 转发的转发消息
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             desc = xml.xpath('/msg/appmsg/des/text()')[0]
@@ -579,6 +582,24 @@ def efb_other_wrapper(text: str) -> Union[Message, None]:
     elif msg_type == "paymsg":
         if "待接收" in text and "转账" in text:
             efb_msg = efb_text_simple_wrapper("[你有一笔待接收的转账]")
+    elif msg_type == "carditemmsg":
+        msg_type = xml.xpath('/sysmsg/carditemmsg/msg_type/text()')[0]
+        if str(msg_type) == "15":
+            title = xml.xpath('/sysmsg/carditemmsg/title/text()')[0]
+            desc = xml.xpath('/sysmsg/carditemmsg/description/text()')[0]
+            url = xml.xpath('/sysmsg/carditemmsg/logo_url/text()')[0]
+            attribute = LinkAttribute(
+            title = title,
+            description = desc,
+            url = url,
+            image = None
+            )
+            efb_msg = Message(
+            attributes=attribute,
+            type=MsgType.Link,
+            text= None,
+            vendor_specific={ "is_mp": False }
+            )
 
     if efb_msg:
         return efb_msg
