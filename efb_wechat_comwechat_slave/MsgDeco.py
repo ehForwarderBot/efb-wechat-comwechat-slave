@@ -281,7 +281,10 @@ def efb_share_link_wrapper(text: str) -> Message:
                 text='未解密表情消息 ，请在手机端查看',
             )
         elif type == 19: # 合并转发的聊天记录
-            msg_title = xml.xpath('/msg/appmsg/title/text()')[0]
+            try:
+                msg_title = xml.xpath('/msg/appmsg/title/text()')[0]
+            except:
+                msg_title = ""
             forward_content = xml.xpath('/msg/appmsg/des/text()')[0]
             result_text += f"{msg_title}\n\n{forward_content}"
             efb_msg = Message(
@@ -580,8 +583,22 @@ def efb_other_wrapper(text: str) -> Union[Message, None]:
         elif str(xml.xpath('/sysmsg/todo/op/text()')[0]) == "1":
             efb_msg = efb_text_simple_wrapper("[撤回了群待办]")
     elif msg_type == "paymsg":
+        try:
+            paymsg_type = str(xml.xpath('/sysmsg/paymsg/PayMsgType/text()')[0])
+        except:
+            paymsg_type = ""
+        if paymsg_type == "9":
+            status = xml.xpath('/sysmsg/paymsg/status/text()')[0]
+            displayname = xml.xpath('/sysmsg/paymsg/displayname/text()')[0]
+            if str(status) == "0":
+                efb_msg = efb_text_simple_wrapper(f"[{displayname} 进入扫码支付]")
+            if str(status) == "1":
+                efb_msg = efb_text_simple_wrapper(f"[{displayname} 完成了扫码支付]")
+            elif str(status) == "2":
+                efb_msg = efb_text_simple_wrapper(f"[{displayname} 取消了扫码支付]")
         if "待接收" in text and "转账" in text:
             efb_msg = efb_text_simple_wrapper("[你有一笔待接收的转账]")
+        
     elif msg_type == "carditemmsg":
         msg_type = xml.xpath('/sysmsg/carditemmsg/msg_type/text()')[0]
         if str(msg_type) == "15":

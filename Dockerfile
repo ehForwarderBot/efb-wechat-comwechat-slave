@@ -12,7 +12,7 @@ RUN python -m venv --copies /app/venv; \
     pip3 install git+https://github.com/QQ-War/efb-keyword-reply.git; \
     pip3 install git+https://github.com/QQ-War/efb_message_merge.git; \
     pip3 install --no-deps --force-reinstall Pillow; \
-    pip3 install --ignore-installed PyYAML TgCrypto simplejson
+    pip3 install --ignore-installed PyYAML TgCrypto
     
 FROM python:alpine AS prod
 
