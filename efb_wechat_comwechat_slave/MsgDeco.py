@@ -429,6 +429,12 @@ def efb_share_link_wrapper(text: str) -> Message:
                     text= f"接收微信转账 {money} 元",
                     vendor_specific={ "is_mp": False }
                 )
+            elif subtype == "4":
+                efb_msg = Message(
+                    type=MsgType.Text,
+                    text= f"退还微信转账 {money} 元",
+                    vendor_specific={ "is_mp": False }
+                )
     except Exception as e:
         print_exc()
 
