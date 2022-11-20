@@ -189,7 +189,7 @@ class ComWeChatChannel(SlaveChannel):
             transferid = re.search("<transferid><!\[CDATA\[(.*)\]\]><\/transferid>", msg["message"]).group(1)
             text = (
                 f"收到 {name} 转账:\n"
-                "金额为 {money} 元\n"
+                f"金额为 {money} 元\n"
             )
 
             commands = [

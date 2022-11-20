@@ -66,9 +66,9 @@ def MsgProcess(msg : dict , chat) -> Message:
 
     elif msg["type"] == "voip":
         if "<status>1</status>" in msg["message"]:
-            return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n语音邀请")
+            return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n[语音邀请]")
         if "<status>2</status>" in msg["message"]:
-            return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n语音挂断")
+            return efb_text_simple_wrapper("[语音/视频聊天]\n  - - - - - - - - - - - - - - - \n[语音挂断]")
         if '<voipmsg type="VoIPBubbleMsg"><VoIPBubbleMsg><msg>' in msg["message"]:
             content = re.search("<msg><!\[CDATA\[(.*?)\]\]></msg>", msg["message"]).group(1)
             return efb_text_simple_wrapper(f"[{content}]")
