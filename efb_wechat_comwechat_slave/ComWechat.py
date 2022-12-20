@@ -471,7 +471,7 @@ class ComWeChatChannel(SlaveChannel):
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
             AudioSegment.from_ogg(msg.file.name).export(f, format="mp3")
             msg.file = f
-            msg.file.name = f.name
+            msg.file.name = "语音留言"
             msg.type = MsgType.Video
             msg.filename = f.name.split("/")[-1]
         
