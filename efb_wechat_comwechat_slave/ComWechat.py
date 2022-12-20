@@ -14,7 +14,7 @@ from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
 
-from ehforwarderbot import MsgType, Chat, Message, Status, coordinator
+from ehforwarderbot import MsgType, Chat, Message, Status, coordinator, ChatMember
 from wechatrobot import WeChatRobot
 
 from . import __version__ as version
@@ -565,6 +565,14 @@ class ComWeChatChannel(SlaveChannel):
 
     def get_chat_picture(self, chat: 'Chat') -> BinaryIO:
         wxid = chat.uid
+        result = self.bot.GetPictureBySql(wxid = wxid)
+        if result:
+            return download_file(result)
+        else:
+            return None
+
+    def get_chat_member_picture(self, chat_member: 'ChatMember') -> BinaryIO:
+        wxid = chat_member.uid
         result = self.bot.GetPictureBySql(wxid = wxid)
         if result:
             return download_file(result)
