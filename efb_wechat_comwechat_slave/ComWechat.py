@@ -9,12 +9,12 @@ import os
 import re
 import time
 import json
-from ehforwarderbot.chat import PrivateChat , SystemChatMember
+from ehforwarderbot.chat import PrivateChat , SystemChatMember, ChatMember
 from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
 
-from ehforwarderbot import MsgType, Chat, Message, Status, coordinator, ChatMember
+from ehforwarderbot import MsgType, Chat, Message, Status, coordinator
 from wechatrobot import WeChatRobot
 
 from . import __version__ as version
