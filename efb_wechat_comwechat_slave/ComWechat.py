@@ -9,7 +9,7 @@ import os
 import re
 import time
 import json
-from ehforwarderbot.chat import PrivateChat , SystemChatMember
+from ehforwarderbot.chat import PrivateChat , SystemChatMember, ChatMember
 from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
@@ -471,7 +471,7 @@ class ComWeChatChannel(SlaveChannel):
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
             AudioSegment.from_ogg(msg.file.name).export(f, format="mp3")
             msg.file = f
-            msg.file.name = f.name
+            msg.file.name = "语音留言"
             msg.type = MsgType.Video
             msg.filename = f.name.split("/")[-1]
         
@@ -565,6 +565,14 @@ class ComWeChatChannel(SlaveChannel):
 
     def get_chat_picture(self, chat: 'Chat') -> BinaryIO:
         wxid = chat.uid
+        result = self.bot.GetPictureBySql(wxid = wxid)
+        if result:
+            return download_file(result)
+        else:
+            return None
+
+    def get_chat_member_picture(self, chat_member: 'ChatMember') -> BinaryIO:
+        wxid = chat_member.uid
         result = self.bot.GetPictureBySql(wxid = wxid)
         if result:
             return download_file(result)
