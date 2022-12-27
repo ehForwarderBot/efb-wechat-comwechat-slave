@@ -8,16 +8,17 @@ import yaml
 from typing import Dict , Any
 import pilk
 import pydub
+import os
 
 #从本地读取配置
-def load_config(path : str) -> Dict[str, Any]:
+def load_config(path : str) -> Dict[str, None]:
     """
     Load configuration from path specified by the framework.
     Configuration file is in YAML format.
     """
-    if not path.exists():
+    if not os.path.exists(path):
         return
-    with path.open() as f:
+    with open( path , "rb") as f:
         d = yaml.full_load(f)
         if not d:
             return

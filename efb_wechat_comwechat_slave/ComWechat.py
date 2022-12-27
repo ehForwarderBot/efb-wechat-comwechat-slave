@@ -63,10 +63,12 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("ComWeChat Slave Channel initialized.")
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
-        self.dir = self.config["dir"]
         self.bot = WeChatRobot()
         self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
         self.base_path = self.bot.get_base_path()
+        self.dir = self.config["dir"]
+        if not self.dir.endswith("/"):
+            self.dir += "/"
         ChatMgr.slave_channel = self
 
         @self.bot.on("self_msg")
