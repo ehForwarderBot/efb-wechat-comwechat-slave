@@ -30,7 +30,7 @@ def MsgProcess(msg : dict , chat) -> Message:
     elif msg["type"] == "sysmsg":
         if "<revokemsg>" in msg["message"]:  # 重复的撤回通知，不在此处处理
             return                            
-        return efb_text_simple_wrapper(msg['message'])
+        return efb_text_simple_wrapper("[" + msg['message'] + "]")
 
     elif msg["type"] == "image":
         file = wechatimagedecode(msg["filepath"])

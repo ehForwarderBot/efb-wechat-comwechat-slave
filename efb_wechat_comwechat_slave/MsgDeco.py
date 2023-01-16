@@ -280,6 +280,12 @@ def efb_share_link_wrapper(text: str) -> Message:
                 type=MsgType.Unsupported,
                 text='未解密表情消息 ，请在手机端查看',
             )
+        elif type == 17:
+            msg_title = xml.xpath('/msg/appmsg/title/text()')[0]
+            efb_msg = Message(
+                type=MsgType.Text,
+                text=msg_title,
+            )
         elif type == 19: # 合并转发的聊天记录
             try:
                 msg_title = xml.xpath('/msg/appmsg/title/text()')[0]
