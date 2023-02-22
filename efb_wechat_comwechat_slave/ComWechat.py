@@ -5,6 +5,7 @@ from traceback import print_exc
 from pydub import AudioSegment
 # import qrcode TODO
 import os
+import base64
 
 import re
 import time
@@ -350,9 +351,22 @@ class ComWeChatChannel(SlaveChannel):
             ...
 
         if msg["type"] == "voice":
-            file_path = re.search("clientmsgid=\"(.*?)\"", msg["message"]).group(1) + ".amr"
             msg["timestamp"] = int(time.time())
-            msg["filepath"] = f'''{self.dir}{msg["self"]}/{file_path}'''
+            sql = f'SELECT Buf FROM Media WHERE Reserved0 = {msg["msgid"]}'
+            dbresult = self.bot.QueryDatabase(db_handle=self.bot.GetDBHandle("MediaMSG0.db"), sql=sql)["data"]
+            msg["filepath"] = 'notexist' + str(msg["timestamp"])
+            while (int(time.time()) - msg["timestamp"]) < self.time_out:
+                if len(dbresult) == 2:
+                    filebuffer = dbresult[1][0]
+                    decoded = bytes(base64.b64decode(filebuffer))
+                    msg["filepath"] = f'{self.dir}{msg["self"]}/{msg["timestamp"]}'
+                    with open(msg["filepath"], 'wb') as f:
+                        f.write(decoded)
+                    f.close()
+                    break
+                else:
+                    time.sleep(1)
+                    dbresult = self.bot.QueryDatabase(db_handle=self.bot.GetDBHandle("MediaMSG0.db"), sql=sql)["data"]
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
