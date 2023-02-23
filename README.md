@@ -13,7 +13,9 @@ docker pull honus/efb-wechat-comwechat-slave:latest
 
 /getmemberlist - 查看群组用户wxid
 
-/at - 后面跟wxid，多个用英文,隔开。
+/at - 后面跟wxid，多个用英文,隔开，最后可用空格隔开，带内容。
+
+/sendcard - 后面格式'wxid nickname'
 
 /changename - 修改群组名称
 
