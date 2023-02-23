@@ -49,7 +49,7 @@ jobs:
         push: true
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/efb-wechat-comwechat-slave:latest
-          ghcr.io/${{ github.repository_owner }}/efb-wechat-comwechat-slave:latest
+          ghcr.io/0honus0/efb-wechat-comwechat-slave:latest
 
     - name: Docker Hub Description
       uses: peter-evans/dockerhub-description@v3
