@@ -528,11 +528,25 @@ class ComWeChatChannel(SlaveChannel):
                 users = msg.text[12::]
                 res = self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
             elif msg.text.startswith('/at'):
-                users, message = msg.text[4::].split(' ', 1)
-                res = self.bot.SendAt(chatroom_id = chat_uid, wxids = users, msg = message)
+                users_message = msg.text[4::].split(' ', 1)
+                if len(users_message) == 2:
+                    user, message = users_message
+                else:
+                    user, message = users_message[0], ''
+                if user != '':
+                    res = self.bot.SendAt(chatroom_id = chat_uid, wxids = users, msg = message)
+                else:
+                    self.bot.SendText(wxid = chat_uid , msg = msg.text)
             elif msg.text.startswith('/sendcard'):
-                user, nickname = msg.text[10::].split(' ', 1)
-                res = self.bot.SendCard(receiver = chat_uid, share_wxid = user, nickname = nickname)
+                user_nickname = msg.text[10::].split(' ', 1)
+                if len(users_nickname) == 2:
+                    user, nickname = users_nickname
+                else:
+                    user, nickname = users_nickname[0], ''
+                if user != '':
+                    res = self.bot.SendCard(receiver = chat_uid, share_wxid = user, nickname = nickname)
+                else:
+                    self.bot.SendText(wxid = chat_uid , msg = msg.text)
             else:
                 res = self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Link]:
