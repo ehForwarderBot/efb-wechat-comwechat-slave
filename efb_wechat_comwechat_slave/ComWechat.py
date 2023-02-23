@@ -517,6 +517,21 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     message = '当前仅支持查询friends, groups, group_members, contacts'
                 self.system_msg({'sender':chat_uid, 'message':message})
+            elif msg.text.startswith('/helpcomwechat'):
+                message = '''/search - 按关键字匹配好友昵称搜索联系人
+
+/addtogroup - 按wxid添加好友到群组
+
+/getmemberlist - 查看群组用户wxid
+
+/at - 后面跟wxid，多个用英文,隔开，最后可用空格隔开，带内容。
+
+/sendcard - 后面格式'wxid nickname'
+
+/changename - 修改群组名称
+
+/getstaticinfo - 可获取friends, groups, contacts信息'''
+                self.system_msg({'sender':chat_uid, 'message':message})
             elif msg.text.startswith('/search'):
                 keyword = msg.text[8::]
                 message = 'result:'
@@ -530,19 +545,19 @@ class ComWeChatChannel(SlaveChannel):
             elif msg.text.startswith('/at'):
                 users_message = msg.text[4::].split(' ', 1)
                 if len(users_message) == 2:
-                    user, message = users_message
+                    users, message = users_message
                 else:
-                    user, message = users_message[0], ''
-                if user != '':
+                    users, message = users_message[0], ''
+                if users != '':
                     res = self.bot.SendAt(chatroom_id = chat_uid, wxids = users, msg = message)
                 else:
                     self.bot.SendText(wxid = chat_uid , msg = msg.text)
             elif msg.text.startswith('/sendcard'):
                 user_nickname = msg.text[10::].split(' ', 1)
-                if len(users_nickname) == 2:
-                    user, nickname = users_nickname
+                if len(user_nickname) == 2:
+                    user, nickname = user_nickname
                 else:
-                    user, nickname = users_nickname[0], ''
+                    user, nickname = user_nickname[0], ''
                 if user != '':
                     res = self.bot.SendCard(receiver = chat_uid, share_wxid = user, nickname = nickname)
                 else:
