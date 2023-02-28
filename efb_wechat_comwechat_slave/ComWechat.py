@@ -647,7 +647,7 @@ class ComWeChatChannel(SlaveChannel):
         try:
             name = self.contacts[wxid]
             if name == "":
-                name = sender
+                name = wxid
         except:
             data = self.bot.GetContactBySql(wxid = wxid)
             if data:
