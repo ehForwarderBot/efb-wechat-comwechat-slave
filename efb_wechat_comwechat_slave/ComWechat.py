@@ -530,6 +530,8 @@ class ComWeChatChannel(SlaveChannel):
 
 /changename - 修改群组名称
 
+/addfriend - 后面格式'wxid message'
+
 /getstaticinfo - 可获取friends, groups, contacts信息'''
                 self.system_msg({'sender':chat_uid, 'message':message})
             elif msg.text.startswith('/search'):
@@ -560,6 +562,16 @@ class ComWeChatChannel(SlaveChannel):
                     user, nickname = user_nickname[0], ''
                 if user != '':
                     res = self.bot.SendCard(receiver = chat_uid, share_wxid = user, nickname = nickname)
+                else:
+                    self.bot.SendText(wxid = chat_uid , msg = msg.text)
+            elif msg.text.startswith('/addfriend'):
+                user_invite = msg.text[11::].split(' ', 1)
+                if len(user_invite) == 2:
+                    user, invite = user_invite
+                else:
+                    user, invite = user_invite[0], ''
+                if user != '':
+                    res = self.bot.AddContactByWxid(wxid = user, msg = invite)
                 else:
                     self.bot.SendText(wxid = chat_uid , msg = msg.text)
             else:
