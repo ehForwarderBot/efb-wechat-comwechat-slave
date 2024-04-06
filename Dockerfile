@@ -11,6 +11,7 @@ RUN python -m venv --copies /app/venv; \
     pip3 install git+https://github.com/0honus0/efb-wechat-comwechat-slave.git; \
     pip3 install git+https://github.com/QQ-War/efb-keyword-reply.git; \
     pip3 install git+https://github.com/QQ-War/efb_message_merge.git; \
+    pip3 install urllib3==1.26.15; \
     pip3 install --no-deps --force-reinstall Pillow; \
     pip3 install --ignore-installed PyYAML TgCrypto
     
