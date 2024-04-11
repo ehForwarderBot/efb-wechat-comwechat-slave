@@ -1,6 +1,7 @@
-from typing import Mapping, Tuple, Union, IO
+from typing import Mapping, Tuple, List, Union, IO
 import magic
 from lxml import etree
+from functools import partial
 from traceback import print_exc
 import re , json
 
@@ -24,13 +25,13 @@ def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union
         efb_msg.substitutions = Substitutions(ats)
     return efb_msg
 
-def efb_image_wrapper(file: IO, filename: str = None, text: str = None) -> Message:
+def efb_image_wrapper(file: IO, filename: str = None, text: str = None) -> Union[Message, List[Message]]:
     """
     A EFB message wrapper for images.
     :param file: The file handle
     :param filename: The actual filename
     :param text: The attached text
-    :return: EFB Message
+    :return: EFB Message or list of EFB Messages
     """
     efb_msg = Message()
     efb_msg.file = file
@@ -106,6 +107,36 @@ def efb_file_wrapper(file: IO, filename: str = None, text: str = None) -> Messag
         efb_msg.text = text
     return efb_msg
 
+def efb_mp_post_wrapper(item: etree.Element, show_name: str = None) -> Message:
+    url = cover = None
+    title = digest = result_text = ''
+    try:
+        title = item.find('title').text
+        url = item.find('url').text
+        digest = item.find('digest').text
+        cover = item.find('cover').text
+    except Exception:
+        print_exc()
+
+    digest += f'\n- - - - from {show_name}' if show_name else ''
+    if title and url:
+        attribute = LinkAttribute(
+            title=title,
+            description=digest,
+            url=url,
+            image=cover,
+        )
+        return Message(
+            attributes=attribute,
+            type=MsgType.Link,
+            text=result_text,
+            vendor_specific={'is_mp': True},
+        )
+    # 部分公众号通知没有url信息
+    return Message(
+        type=MsgType.Text,
+        text=f'{title}\n  - - - - - - - - - - - - - - - \n{digest}' if digest else str(title),
+    )
 
 def efb_share_link_wrapper(text: str) -> Message:
     """
@@ -128,7 +159,7 @@ def efb_share_link_wrapper(text: str) -> Message:
     //appmsg/type = 36 : 京东农场，滴滴打车
     //appmsg/type = 51 : 视频（微信视频号分享）
     //appmsg/type = 53 : 转账过期退还通知
-    //appmsg/type = 57 : 引用(回复)消息，未细致研究哪个参数是被引用的消息 id 
+    //appmsg/type = 57 : 引用(回复)消息，未细致研究哪个参数是被引用的消息 id
     //appmsg/type = 63 : 直播（微信视频号分享）
     //appmsg/type = 74 : 文件 (收到文件的第一个提示)
     //appmsg/type = 87 : 群公告
@@ -139,7 +170,7 @@ def efb_share_link_wrapper(text: str) -> Message:
 
     xml = etree.fromstring(text)
     result_text = ""
-    try: 
+    try:
         type = int(xml.xpath('/msg/appmsg/type/text()')[0])
         if type in [ 1 , 2 ]:
             title = xml.xpath('/msg/appmsg/title/text()')[0]
@@ -243,38 +274,8 @@ def efb_share_link_wrapper(text: str) -> Message:
                     )
             elif showtype == 1: # 公众号发的推送
                 items = xml.xpath('//item')
-                for item in items:
-                    title = url = digest = cover = None # 初始化
-                    try:
-                        title = item.find("title").text
-                        url = item.find("url").text
-                        digest = item.find("digest").text
-                        cover = item.find("cover").text
-                    except Exception as e:
-                        print_exc()
-                    
-                    if '@app' in text:
-                        name = xml.xpath('//publisher/nickname/text()')[0]
-                        digest += f"\n- - - - from {name}"
-                    if title and url:
-                        attribute = LinkAttribute(
-                            title=title,
-                            description=digest,
-                            url=url,
-                            image= cover,
-                        )
-                        efb_msg = Message(
-                            attributes=attribute,
-                            type=MsgType.Link,
-                            text=result_text,
-                            vendor_specific={ "is_mp": True }
-                        )
-                    else: # 部分公众号通知没有url信息
-                        result_text += f"{title}\n  - - - - - - - - - - - - - - - \n{digest}"
-                        efb_msg = Message(
-                            type=MsgType.Text,
-                            text=result_text
-                        )
+                show_name = xml.xpath('//publisher/nickname/text()')[0] if '@app' in text else ''
+                efb_msg = list(map(partial(efb_mp_post_wrapper, show_name=show_name), items))
         elif type == 8:
             efb_msg = Message(
                 type=MsgType.Unsupported,
@@ -346,7 +347,7 @@ def efb_share_link_wrapper(text: str) -> Message:
                 type=MsgType.Text,
                 text= '系统消息 : 消息同步',
                 vendor_specific={ "is_mp": False }
-            )  
+            )
         elif type == 40: # 转发的转发消息
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             desc = xml.xpath('/msg/appmsg/des/text()')[0]
@@ -610,7 +611,7 @@ def efb_other_wrapper(text: str) -> Union[Message, None]:
                 efb_msg = efb_text_simple_wrapper(f"[{displayname} 取消了扫码支付]")
         if "待接收" in text and "转账" in text:
             efb_msg = efb_text_simple_wrapper("[你有一笔待接收的转账]")
-        
+
     elif msg_type == "carditemmsg":
         msg_type = xml.xpath('/sysmsg/carditemmsg/msg_type/text()')[0]
         if str(msg_type) == "15":
