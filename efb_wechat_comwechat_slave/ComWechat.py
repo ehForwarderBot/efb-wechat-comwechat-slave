@@ -46,7 +46,7 @@ class ComWeChatChannel(SlaveChannel):
 
     contacts : Dict = {}            # {wxid : {alias : str , remark : str, nickname : str , type : int}} -> {wxid : name(after handle)}
     group_members : Dict = {}       # {"group_id" : { "wxID" : "displayName"}}
-    
+
     time_out : int = 120
     cache =  TTLCache(maxsize=200, ttl= time_out)  # 缓存发送过的消息ID
     file_msg : Dict = {}                           # 存储待修改的文件类消息 {path : msg}
@@ -99,7 +99,7 @@ class ComWeChatChannel(SlaveChannel):
         @self.bot.on("friend_msg")
         def on_friend_msg(msg : Dict):
             self.logger.debug(f"friend_msg:{msg}")
-            
+
             sender = msg['sender']
 
             if msg["type"] == "eventnotify":
@@ -116,15 +116,15 @@ class ComWeChatChannel(SlaveChannel):
                 self.logger.debug(f'modified_chat:{chat}')
             author = chat.other
             self.handle_msg(msg, author, chat)
-            
+
         @self.bot.on("group_msg")
         def on_group_msg(msg : Dict):
             self.logger.debug(f"group_msg:{msg}")
             sender = msg["sender"]
-            wxid  =  msg["wxid"] 
+            wxid  =  msg["wxid"]
 
             chatname = self.get_name_by_wxid(sender)
-                
+
             chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
                 uid = sender,
                 name = chatname,
@@ -147,7 +147,7 @@ class ComWeChatChannel(SlaveChannel):
             self.logger.debug(f"revoke_msg:{msg}")
             sender = msg["sender"]
             if "@chatroom" in sender:
-                wxid  =  msg["wxid"] 
+                wxid  =  msg["wxid"]
 
             name = self.get_name_by_wxid(sender)
 
@@ -287,6 +287,20 @@ class ComWeChatChannel(SlaveChannel):
             # 暂时屏蔽
             self.system_msg(content)
 
+    @staticmethod
+    def send_efb_msgs(efb_msgs: Union[Message, List[Message]], **kwargs):
+        if not efb_msgs:
+            return
+        efb_msgs = [efb_msgs] if isinstance(efb_msgs, Message) else efb_msgs
+        if 'deliver_to' not in kwargs:
+            kwargs['deliver_to'] = coordinator.master
+        for efb_msg in efb_msgs:
+            for k, v in kwargs.items():
+                setattr(efb_msg, k, v)
+            coordinator.send_message(efb_msg)
+            if efb_msg.file:
+                efb_msg.file.close()
+
     def system_msg(self, content : Dict):
         self.logger.debug(f"system_msg:{content}")
         msg = Message()
@@ -294,33 +308,26 @@ class ComWeChatChannel(SlaveChannel):
         if "name" in content:
             name = content["name"]
         else:
-            name  = '\u2139 System' 
-        
+            name  = '\u2139 System'
+
         chat = ChatMgr.build_efb_chat_as_system_user(EFBSystemUser(
             uid = sender,
             name = name
         ))
-        
+
         try:
             author = chat.get_member(SystemChatMember.SYSTEM_ID)
         except KeyError:
             author = chat.add_system_member()
-        
+
         if "commands" in content:
             msg.commands = MessageCommands(content["commands"])
         if "message" in content:
             msg.text = content['message']
 
-        msg.uid = int(time.time())
-        msg.chat = chat
-        msg.author = author
-        msg.deliver_to = coordinator.master
-        msg.type = MsgType.Text
-        coordinator.send_message(msg)
+        self.send_efb_msgs(msg, uid=int(time.time()), chat=chat, author=author, type=MsgType.Text)
 
     def handle_msg(self , msg : Dict[str, Any] , author : 'ChatMember' , chat : 'Chat'):
-        efb_msgs = []
-
         emojiList = re.findall('\[[\w|！|!| ]+\]' , msg["message"])
         for emoji in emojiList:
             try:
@@ -357,16 +364,7 @@ class ComWeChatChannel(SlaveChannel):
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
-        efb_msg = MsgProcess(msg , chat)
-        if not efb_msg:
-            return
-        efb_msg.author = author
-        efb_msg.chat = chat
-        efb_msg.uid = msg["msgid"]
-        efb_msg.deliver_to = coordinator.master
-        coordinator.send_message(efb_msg)
-        if efb_msg.file:
-            efb_msg.file.close()
+        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
 
     def handle_file_msg(self):
         while True:
@@ -395,17 +393,10 @@ class ComWeChatChannel(SlaveChannel):
                                 f.write(decoded)
                             f.close()
                             flag = True
-                    
+
                     if flag:
                         del self.file_msg[path]
-                        efb_msg = MsgProcess(msg , chat)
-                        efb_msg.author = author
-                        efb_msg.chat = chat
-                        efb_msg.uid = msg["msgid"]
-                        efb_msg.deliver_to = coordinator.master
-                        coordinator.send_message(efb_msg)
-                        if efb_msg.file:
-                            efb_msg.file.close()
+                        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
@@ -416,7 +407,7 @@ class ComWeChatChannel(SlaveChannel):
                             os.remove(file_path)
                         except:
                             pass
-                        del self.delete_file[file_path]  
+                        del self.delete_file[file_path]
 
     def process_friend_request(self , v3 , v4):
         self.logger.debug(f"process_friend_request:{v3} {v4}")
@@ -424,7 +415,7 @@ class ComWeChatChannel(SlaveChannel):
         if str(res['msg']) != "0":
             return "Success"
         else:
-            return "Failed" 
+            return "Failed"
 
     def process_transfer(self, transcationid , transferid , wxid):
         res = self.bot.GetTransfer(transcationid = transcationid , transferid = transferid , wxid = wxid)
@@ -443,7 +434,7 @@ class ComWeChatChannel(SlaveChannel):
     # 定时任务
     def scheduled_job(self):
         count = 1
-        while True: 
+        while True:
             time.sleep(1)
             if count % 1800 == 0:
                 self.GetGroupListBySql()
@@ -462,7 +453,7 @@ class ComWeChatChannel(SlaveChannel):
     def get_chat(self, chat_uid: ChatID) -> 'Chat':
         if not self.friends and not self.groups:
             self.GetContactListBySql()
-        
+
         if "@chatroom" in chat_uid:
             for group in self.groups:
                 if group.uid == chat_uid:
@@ -486,7 +477,7 @@ class ComWeChatChannel(SlaveChannel):
             msg.file.name = "语音留言.mp3"
             msg.type = MsgType.Video
             msg.filename = f.name.split("/")[-1]
-        
+
         if msg.type in [MsgType.Text]:
             if msg.text.startswith('/changename'):
                 newname = msg.text.strip('/changename ')
@@ -700,4 +691,4 @@ class ComWeChatChannel(SlaveChannel):
         self.group_members = self.bot.GetAllGroupMembersBySql()
     #定时更新 End
 
-    
+

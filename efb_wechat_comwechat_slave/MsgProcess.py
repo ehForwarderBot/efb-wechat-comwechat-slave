@@ -1,3 +1,4 @@
+from typing import Union, List
 import base64
 import tempfile
 import logging
@@ -11,7 +12,7 @@ from lxml import etree
 from ehforwarderbot import utils as efb_utils
 from ehforwarderbot.message import Message
 
-def MsgProcess(msg : dict , chat) -> Message:
+def MsgProcess(msg : dict , chat) -> Union[Message, List[Message]]:
 
     if msg["type"] == "text":
         at_list = {}
@@ -29,7 +30,7 @@ def MsgProcess(msg : dict , chat) -> Message:
 
     elif msg["type"] == "sysmsg":
         if "<revokemsg>" in msg["message"]:  # 重复的撤回通知，不在此处处理
-            return                            
+            return
         return efb_text_simple_wrapper("[" + msg['message'] + "]")
 
     elif msg["type"] == "image":
@@ -48,7 +49,7 @@ def MsgProcess(msg : dict , chat) -> Message:
         if ("FileStorage" in msg["filepath"]) and ("Cache" not in msg["filepath"]):
             file = load_local_file_to_temp(msg["filepath"])
             return efb_file_wrapper(file , msg["filepath"].split("/")[-1])
-        return efb_share_link_wrapper(msg['message'])
+        return efb_share_link_wrapper(msg['message'])  # may return msgs in a list
 
     elif msg["type"] == "voice":
         file = convert_silk_to_mp3(load_local_file_to_temp(msg["filepath"]))
@@ -57,10 +58,10 @@ def MsgProcess(msg : dict , chat) -> Message:
     elif msg["type"] == "video":
         file = load_local_file_to_temp(msg["filepath"])
         return efb_video_wrapper(file)
-    
+
     elif msg["type"] == "location":
         return efb_location_wrapper(msg["message"])
-    
+
     elif msg["type"] == "qqmail":
         return efb_qqmail_wrapper(msg["message"])
 
