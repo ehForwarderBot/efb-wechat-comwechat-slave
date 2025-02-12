@@ -26,6 +26,8 @@ setup(
         "PyYaml>=5.3",
         "cachetools",
         "requests",
+        "qrcode",
+        "pyzbar",
         "python-magic",
         "lxml",
         "pilk",
