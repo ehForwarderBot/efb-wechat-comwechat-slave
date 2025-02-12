@@ -3,15 +3,16 @@ import time
 import threading
 from traceback import print_exc
 from pydub import AudioSegment
-# import qrcode TODO
+import qrcode
+from pyzbar.pyzbar import decode as pyzbar_decode
 import os
 import base64
+from pathlib import Path
 
 import re
-import time
 import json
-from ehforwarderbot.chat import PrivateChat , SystemChatMember, ChatMember
-from typing import Optional, Collection, BinaryIO, Dict, Any , Union , List
+from ehforwarderbot.chat import SystemChat, PrivateChat , SystemChatMember, ChatMember
+from typing import Tuple, Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
 
@@ -32,6 +33,12 @@ from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystem
 from .MsgDeco import efb_text_simple_wrapper
 from .MsgProcess import MsgProcess
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
+
+from rich.console import Console
+from rich import print as rprint
+from io import BytesIO
+from PIL import Image
+from pyqrcode import QRCode
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
@@ -65,6 +72,14 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
         self.bot = WeChatRobot()
+
+        self.qr_url = ""
+        self.master_qr_picture_id: Optional[str] = None
+        self.user_auth_chat = SystemChat(channel=self,
+                                    name="EWS User Auth",
+                                    uid=ChatID("__ews_user_auth__"))
+
+        self.login()
         self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
         self.base_path = self.bot.get_base_path()
         self.dir = self.config["dir"]
@@ -286,6 +301,120 @@ class ComWeChatChannel(SlaveChannel):
             #     content["commands"] = commands
             # 暂时屏蔽
             self.system_msg(content)
+
+    def login(self):
+        self.master_qr_picture_id = None
+        # 每隔 10 秒检查一次登录状态
+        while True:
+            try:
+                response = self.bot.IsLoginIn()
+                if response.get("is_login", 0) == 1:
+                    print(f"登录成功", flush=True)
+                    break
+                
+                # 获取二维码并检查返回结果
+                if self.get_qrcode():
+                    print(f"已经登录", flush=True)
+                    break
+                    
+            except Exception as e:
+                self.logger.error(f"登录出错: {str(e)}")
+                pass
+                
+            time.sleep(10)
+
+    def get_qrcode(self):
+        result = self.bot.GetQrcodeImage()
+        
+        # 检查是否返回了 JSON 数据（已登录）
+        try:
+            json_result = json.loads(result)
+            if isinstance(json_result, dict):
+                if json_result.get("result") == "OK":
+                    return True
+        except Exception:
+            pass
+            
+        file = self.save_qr_code(result)
+        if not file:
+            return False
+            
+        url = self.decode_qr_code(file)
+        if not url:
+            os.unlink(file.name)  # 删除临时文件
+            return False
+            
+        if self.qr_url != url:
+            self.qr_url = url
+            self.console_qr_code(url)
+            # self.master_qr_code(file)
+            
+        # 在使用完成后删除临时文件
+        os.unlink(file.name)
+        return False
+
+    @staticmethod
+    def save_qr_code(qr_code):
+        # 创建临时文件保存二维码图片
+        tmp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+        try:
+            tmp_file.write(qr_code)
+            tmp_file.flush()
+        except:
+            print("[red]获取二维码失败[/red]", flush=True)
+            tmp_file.close()
+            return None
+        tmp_file.close()
+        return tmp_file
+
+    @staticmethod
+    def decode_qr_code(file):
+        # 从临时文件读取图片并解码二维码数据
+        qr_img = Image.open(file.name)
+        try:
+            return pyzbar_decode(qr_img)[0].data.decode('utf-8')
+        except IndexError:
+            # 如果解码失败，直接使用图片数据
+            print("[yellow]无法解析二维码数据，但二维码图片已保存[/yellow]", flush=True)
+
+    @staticmethod
+    def console_qr_code(url):
+        # 使用 qrcode 创建一个新的二维码实例
+        qr = qrcode.QRCode(
+            version=None,  # 自动选择合适的版本
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=1,    # 每个 QR 模块的像素大小
+            border=1       # 二维码边框大小
+        )
+        qr.add_data(url)
+        qr.make(fit=True)  # 自动调整大小
+        
+        # 使用 rich 打印彩色提示
+        console = Console()
+        console.print("\n[bold green]请扫描以下二维码登录微信：[/bold green]")
+        # 在终端打印二维码
+        qr.print_ascii(invert=True)
+
+    # TODO master 还未初始化
+    # def master_qr_code(self, file):
+    #     msg = Message(
+    #         type=MsgType.Text,
+    #         chat=self.user_auth_chat,
+    #         author=self.user_auth_chat.other,
+    #         deliver_to=coordinator.master,
+    #     )
+    #     msg.type = MsgType.Image
+    #     msg.text = self._("QR code expired, please scan the new one.")
+    #     msg.path = Path(file.name)
+    #     msg.file = file
+    #     msg.mime = 'image/png'
+    #     if self.master_qr_picture_id is not None:
+    #         msg.edit = True
+    #         msg.edit_media = True
+    #         msg.uid = self.master_qr_picture_id
+    #     else:
+    #         self.master_qr_picture_id = msg.uid
+    #     coordinator.send_message(msg)
 
     @staticmethod
     def send_efb_msgs(efb_msgs: Union[Message, List[Message]], **kwargs):
