@@ -397,6 +397,16 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 if refer_msgType == 1: # 被引用的消息是文本
                     refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
                     result_text += f"「{refer_displayname}: {refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
+                elif refer_msgType == 49: # 被引用的消息也是引用消息
+                    try:
+                        refer_msg_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息引用的消息
+                        refer_msg_xml = etree.fromstring(refer_msg_content)
+                        type = int(refer_msg_xml.xpath('/msg/appmsg/type/text()')[0])
+                        if type == 57:
+                            refer_msg_text = refer_msg_xml.xpath('/msg/appmsg/title/text()')[0]
+                            result_text += f"「{refer_displayname}: {refer_msg_text}」\n  - - - - - - - - - - - - - - - \n{msg}"
+                    except Exception as e:
+                        print_exc()
                 else: # 被引用的消息非文本，提示不支持
                     result_text += f"「{refer_displayname}: 系统消息: 被引用的消息不是文本,暂不支持展示」\n  - - - - - - - - - - - - - - - \n{msg}"
                 efb_msg.text = result_text
