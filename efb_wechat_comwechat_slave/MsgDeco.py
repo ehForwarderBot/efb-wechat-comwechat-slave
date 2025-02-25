@@ -138,7 +138,7 @@ def efb_mp_post_wrapper(item: etree.Element, show_name: str = None) -> Message:
         text=f'{title}\n  - - - - - - - - - - - - - - - \n{digest}' if digest else str(title),
     )
 
-def efb_share_link_wrapper(text: str, chat) -> Message:
+def efb_share_link_wrapper(message: dict, chat) -> Message:
     """
     处理msgType49消息 - 复合xml, xml 中 //appmsg/type 指示具体消息类型.
     /msg/appmsg/type
@@ -164,10 +164,11 @@ def efb_share_link_wrapper(text: str, chat) -> Message:
     //appmsg/type = 74 : 文件 (收到文件的第一个提示)
     //appmsg/type = 87 : 群公告
     //appmsg/type = 2000 : 转账
-    :param text: The content of the message
+    :param message: The message
     :return: EFB Message
     """
 
+    text: str = message['message']
     xml = etree.fromstring(text)
     result_text = ""
     try:
@@ -385,14 +386,14 @@ def efb_share_link_wrapper(text: str, chat) -> Message:
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
             refer_svrid = int(xml.xpath('/msg/appmsg/refermsg/svrid/text()')[0]) # 被引用消息 id
             # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/fromusr/text()')[0] # 被引用消息所在房间
-            # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/chatusr/text()')[0] # 被引用消息发送人微信号
+            refer_chatusr = xml.xpath('/msg/appmsg/refermsg/chatusr/text()')[0] # 被引用消息发送人微信号
             refer_displayname = xml.xpath('/msg/appmsg/refermsg/displayname/text()')[0] # 被引用消息发送人微信名称
             efb_msg = Message(
                 type=MsgType.Text,
                 text=msg,
                 vendor_specific={ "is_refer": True }
             )
-            if refer_svrid is None:
+            if refer_svrid is None or refer_chatusr == message["self"]:
                 if refer_msgType == 1: # 被引用的消息是文本
                     refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
                     result_text += f"「{refer_displayname}: {refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
