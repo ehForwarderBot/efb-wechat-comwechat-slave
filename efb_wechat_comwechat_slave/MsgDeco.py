@@ -138,7 +138,7 @@ def efb_mp_post_wrapper(item: etree.Element, show_name: str = None) -> Message:
         text=f'{title}\n  - - - - - - - - - - - - - - - \n{digest}' if digest else str(title),
     )
 
-def efb_share_link_wrapper(text: str) -> Message:
+def efb_share_link_wrapper(text: str, chat) -> Message:
     """
     处理msgType49消息 - 复合xml, xml 中 //appmsg/type 指示具体消息类型.
     /msg/appmsg/type
@@ -383,19 +383,27 @@ def efb_share_link_wrapper(text: str) -> Message:
         elif type == 57: # 引用（回复）消息
             msg = xml.xpath('/msg/appmsg/title/text()')[0]
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
+            refer_svrid = int(xml.xpath('/msg/appmsg/refermsg/svrid/text()')[0]) # 被引用消息 id
             # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/fromusr/text()')[0] # 被引用消息所在房间
             # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/chatusr/text()')[0] # 被引用消息发送人微信号
             refer_displayname = xml.xpath('/msg/appmsg/refermsg/displayname/text()')[0] # 被引用消息发送人微信名称
-            if refer_msgType == 1: # 被引用的消息是文本
-                refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
-                result_text += f"「{refer_displayname}: {refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
-            else: # 被引用的消息非文本，提示不支持
-                result_text += f"「{refer_displayname}: 系统消息: 被引用的消息不是文本,暂不支持展示」\n  - - - - - - - - - - - - - - - \n{msg}"
             efb_msg = Message(
                 type=MsgType.Text,
-                text=result_text,
+                text=msg,
                 vendor_specific={ "is_refer": True }
             )
+            if refer_svrid is None:
+                if refer_msgType == 1: # 被引用的消息是文本
+                    refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
+                    result_text += f"「{refer_displayname}: {refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
+                else: # 被引用的消息非文本，提示不支持
+                    result_text += f"「{refer_displayname}: 系统消息: 被引用的消息不是文本,暂不支持展示」\n  - - - - - - - - - - - - - - - \n{msg}"
+                efb_msg.text = result_text
+            else:
+                efb_msg.target = Message(
+                    uid=str(refer_svrid),
+                    chat=chat,
+                )
         elif type == 63: # 直播（微信视频号分享）
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             url = xml.xpath('/msg/appmsg/url/text()')[0]
