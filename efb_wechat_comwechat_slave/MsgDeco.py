@@ -10,6 +10,13 @@ from ehforwarderbot.chat import ChatMember
 from ehforwarderbot.message import Substitutions, Message, LinkAttribute, LocationAttribute
 from ehforwarderbot.types import MessageID
 
+QUOTE_DIVIDER = " - - - - - - - - - - - - - - - "
+
+def qutoed_text(qutoed_text: str, text: str, prefix: str = "") -> str:
+    if QUOTE_DIVIDER in qutoed_text:
+        qutoed_text = qutoed_text.split(QUOTE_DIVIDER)[-1]
+    return f"「{prefix}{qutoed_text}」\n{QUOTE_DIVIDER}\n{text}"
+
 def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union[Chat, ChatMember]], None] = None) -> Message:
     """
     A simple EFB message wrapper for plain text. Emojis are presented as is (plain text).
@@ -397,10 +404,13 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 text=msg,
                 vendor_specific={ "is_refer": True }
             )
+            prefix = ""
+            if refer_displayname is not None:
+                prefix = f"{refer_displayname}:"
             if refer_svrid is None or refer_chatusr == message["self"]:
                 if refer_msgType == 1: # 被引用的消息是文本
                     refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
-                    result_text += f"「{refer_displayname}: {refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
+                    result_text = qutoed_text(refer_content, msg, prefix)
                 elif refer_msgType == 49: # 被引用的消息也是引用消息
                     try:
                         refer_msg_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息引用的消息
@@ -408,11 +418,11 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                         type = int(refer_msg_xml.xpath('/msg/appmsg/type/text()')[0])
                         if type == 57:
                             refer_msg_text = refer_msg_xml.xpath('/msg/appmsg/title/text()')[0]
-                            result_text += f"「{refer_displayname}: {refer_msg_text}」\n  - - - - - - - - - - - - - - - \n{msg}"
+                            result_text = qutoed_text(refer_msg_text, msg, prefix)
                     except Exception as e:
                         print_exc()
                 else: # 被引用的消息非文本，提示不支持
-                    result_text += f"「{refer_displayname}: 系统消息: 被引用的消息不是文本,暂不支持展示」\n  - - - - - - - - - - - - - - - \n{msg}"
+                    result_text = qutoed_text(" 系统消息: 被引用的消息不是文本,暂不支持展示", msg, prefix)
                 efb_msg.text = result_text
             else:
                 efb_msg.target = Message(
