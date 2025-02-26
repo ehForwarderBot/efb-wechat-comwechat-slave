@@ -384,10 +384,13 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
         elif type == 57: # 引用（回复）消息
             msg = xml.xpath('/msg/appmsg/title/text()')[0]
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
-            refer_svrid = int(xml.xpath('/msg/appmsg/refermsg/svrid/text()')[0]) # 被引用消息 id
+            e = xml.xpath('/msg/appmsg/refermsg/svrid/text()') # 被引用消息 id
+            refer_svrid = len(e) > 0 and int(e[0]) or None
             # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/fromusr/text()')[0] # 被引用消息所在房间
-            refer_chatusr = xml.xpath('/msg/appmsg/refermsg/chatusr/text()')[0] # 被引用消息发送人微信号
-            refer_displayname = xml.xpath('/msg/appmsg/refermsg/displayname/text()')[0] # 被引用消息发送人微信名称
+            e = xml.xpath('/msg/appmsg/refermsg/chatusr/text()') # 被引用消息发送人微信号
+            refer_chatusr = len(e) > 0 and e[0] or None
+            e = xml.xpath('/msg/appmsg/refermsg/displayname/text()') # 被引用消息发送人微信名称
+            refer_displayname = len(e) > 0 and e[0] or refer_chatusr
             efb_msg = Message(
                 type=MsgType.Text,
                 text=msg,
