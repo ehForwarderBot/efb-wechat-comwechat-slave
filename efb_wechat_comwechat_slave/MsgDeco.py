@@ -8,6 +8,7 @@ import re , json
 from ehforwarderbot import MsgType, Chat
 from ehforwarderbot.chat import ChatMember
 from ehforwarderbot.message import Substitutions, Message, LinkAttribute, LocationAttribute
+from ehforwarderbot.types import MessageID
 
 def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union[Chat, ChatMember]], None] = None) -> Message:
     """
@@ -385,7 +386,7 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
             msg = xml.xpath('/msg/appmsg/title/text()')[0]
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
             e = xml.xpath('/msg/appmsg/refermsg/svrid/text()') # 被引用消息 id
-            refer_svrid = len(e) > 0 and int(e[0]) or None
+            refer_svrid = len(e) > 0 and e[0] or None
             # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/fromusr/text()')[0] # 被引用消息所在房间
             e = xml.xpath('/msg/appmsg/refermsg/chatusr/text()') # 被引用消息发送人微信号
             refer_chatusr = len(e) > 0 and e[0] or None
@@ -415,7 +416,7 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 efb_msg.text = result_text
             else:
                 efb_msg.target = Message(
-                    uid=str(refer_svrid),
+                    uid=MessageID(refer_svrid),
                     chat=chat,
                 )
         elif type == 63: # 直播（微信视频号分享）
