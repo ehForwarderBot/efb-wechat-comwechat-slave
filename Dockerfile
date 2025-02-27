@@ -2,7 +2,7 @@ FROM python:alpine AS venv
 
 RUN set -ex; \
     apk --update upgrade; \
-    apk --update add --no-cache python3-dev py3-pillow py3-ruamel.yaml libmagic ffmpeg git gcc zlib-dev jpeg-dev musl-dev libffi-dev openssl-dev libwebp-dev
+    apk --update add --no-cache python3-dev py3-pillow py3-ruamel.yaml libmagic ffmpeg git gcc zlib-dev jpeg-dev musl-dev libffi-dev openssl-dev libwebp-dev zbar-dev
 RUN python -m venv --copies /app/venv; \
     . /app/venv/bin/activate; \
     pip3 install git+https://github.com/QQ-War/efb-telegram-master.git; \
