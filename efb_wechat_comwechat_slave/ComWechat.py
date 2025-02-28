@@ -11,7 +11,7 @@ from pathlib import Path
 
 import re
 import json
-from ehforwarderbot.chat import SystemChat, PrivateChat , SystemChatMember, ChatMember
+from ehforwarderbot.chat import SystemChat, PrivateChat , SystemChatMember, ChatMember, SelfChatMember
 from typing import Tuple, Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
@@ -30,7 +30,7 @@ from ehforwarderbot.status import MessageRemoval
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
-from .MsgDeco import efb_text_simple_wrapper
+from .MsgDeco import qutoed_text
 from .MsgProcess import MsgProcess
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
 
@@ -565,7 +565,7 @@ class ComWeChatChannel(SlaveChannel):
         count = 1
         while True:
             time.sleep(1)
-            if count % 1800 == 0:
+            if count % 1800 == 1:
                 self.GetGroupListBySql()
                 self.GetContactListBySql()
                 count = 1
@@ -695,7 +695,15 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     self.bot.SendText(wxid = chat_uid , msg = msg.text)
             else:
-                res = self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                text = msg.text
+                if isinstance(msg.target, Message):
+                        qt_txt = msg.target.text or msg.target.type.name
+                        if self.group_members.get(msg.chat.uid, None) is not None and not isinstance(msg.target.author, SelfChatMember):
+                            tgt_alias = "@%s\u2005：" % msg.target.author.display_name
+                        else:
+                            tgt_alias = ""
+                        text = qutoed_text(qt_txt, msg.text, tgt_alias)
+                res = self.bot.SendText(wxid = chat_uid , msg = text)
         elif msg.type in [MsgType.Link]:
             self.bot.SendText(wxid = chat_uid , msg = msg.text)
         elif msg.type in [MsgType.Image , MsgType.Sticker]:

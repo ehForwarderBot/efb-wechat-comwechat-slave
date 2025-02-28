@@ -8,6 +8,14 @@ import re , json
 from ehforwarderbot import MsgType, Chat
 from ehforwarderbot.chat import ChatMember
 from ehforwarderbot.message import Substitutions, Message, LinkAttribute, LocationAttribute
+from ehforwarderbot.types import MessageID
+
+QUOTE_DIVIDER = " - - - - - - - - - - - - - - - "
+
+def qutoed_text(qutoed_text: str, text: str, prefix: str = "") -> str:
+    if QUOTE_DIVIDER in qutoed_text:
+        qutoed_text = qutoed_text.split(QUOTE_DIVIDER)[-1]
+    return f"「{prefix}{qutoed_text}」\n{QUOTE_DIVIDER}\n{text}"
 
 def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union[Chat, ChatMember]], None] = None) -> Message:
     """
@@ -138,7 +146,7 @@ def efb_mp_post_wrapper(item: etree.Element, show_name: str = None) -> Message:
         text=f'{title}\n  - - - - - - - - - - - - - - - \n{digest}' if digest else str(title),
     )
 
-def efb_share_link_wrapper(text: str) -> Message:
+def efb_share_link_wrapper(message: dict, chat) -> Message:
     """
     处理msgType49消息 - 复合xml, xml 中 //appmsg/type 指示具体消息类型.
     /msg/appmsg/type
@@ -164,10 +172,11 @@ def efb_share_link_wrapper(text: str) -> Message:
     //appmsg/type = 74 : 文件 (收到文件的第一个提示)
     //appmsg/type = 87 : 群公告
     //appmsg/type = 2000 : 转账
-    :param text: The content of the message
+    :param message: The message
     :return: EFB Message
     """
 
+    text: str = message['message']
     xml = etree.fromstring(text)
     result_text = ""
     try:
@@ -383,19 +392,43 @@ def efb_share_link_wrapper(text: str) -> Message:
         elif type == 57: # 引用（回复）消息
             msg = xml.xpath('/msg/appmsg/title/text()')[0]
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
+            e = xml.xpath('/msg/appmsg/refermsg/svrid/text()') # 被引用消息 id
+            refer_svrid = len(e) > 0 and e[0] or None
             # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/fromusr/text()')[0] # 被引用消息所在房间
-            # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/chatusr/text()')[0] # 被引用消息发送人微信号
-            refer_displayname = xml.xpath('/msg/appmsg/refermsg/displayname/text()')[0] # 被引用消息发送人微信名称
-            if refer_msgType == 1: # 被引用的消息是文本
-                refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
-                result_text += f"「{refer_displayname}: {refer_content}」\n  - - - - - - - - - - - - - - - \n{msg}"
-            else: # 被引用的消息非文本，提示不支持
-                result_text += f"「{refer_displayname}: 系统消息: 被引用的消息不是文本,暂不支持展示」\n  - - - - - - - - - - - - - - - \n{msg}"
+            e = xml.xpath('/msg/appmsg/refermsg/chatusr/text()') # 被引用消息发送人微信号
+            refer_chatusr = len(e) > 0 and e[0] or None
+            e = xml.xpath('/msg/appmsg/refermsg/displayname/text()') # 被引用消息发送人微信名称
+            refer_displayname = len(e) > 0 and e[0] or refer_chatusr
             efb_msg = Message(
                 type=MsgType.Text,
-                text=result_text,
+                text=msg,
                 vendor_specific={ "is_refer": True }
             )
+            prefix = ""
+            if refer_displayname is not None:
+                prefix = f"{refer_displayname}:"
+            if refer_svrid is None or refer_chatusr == message["self"]:
+                if refer_msgType == 1: # 被引用的消息是文本
+                    refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
+                    result_text = qutoed_text(refer_content, msg, prefix)
+                elif refer_msgType == 49: # 被引用的消息也是引用消息
+                    try:
+                        refer_msg_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息引用的消息
+                        refer_msg_xml = etree.fromstring(refer_msg_content)
+                        type = int(refer_msg_xml.xpath('/msg/appmsg/type/text()')[0])
+                        if type == 57:
+                            refer_msg_text = refer_msg_xml.xpath('/msg/appmsg/title/text()')[0]
+                            result_text = qutoed_text(refer_msg_text, msg, prefix)
+                    except Exception as e:
+                        print_exc()
+                else: # 被引用的消息非文本，提示不支持
+                    result_text = qutoed_text(" 系统消息: 被引用的消息不是文本,暂不支持展示", msg, prefix)
+                efb_msg.text = result_text
+            else:
+                efb_msg.target = Message(
+                    uid=MessageID(refer_svrid),
+                    chat=chat,
+                )
         elif type == 63: # 直播（微信视频号分享）
             title = xml.xpath('/msg/appmsg/title/text()')[0]
             url = xml.xpath('/msg/appmsg/url/text()')[0]
