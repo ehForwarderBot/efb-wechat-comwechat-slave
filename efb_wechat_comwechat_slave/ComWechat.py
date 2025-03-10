@@ -79,6 +79,7 @@ class ComWeChatChannel(SlaveChannel):
                                     name="EWS User Auth",
                                     uid=ChatID("__ews_user_auth__"))
 
+        self.qrcode_timeout = self.config.get("qrcode_timeout", 10)
         self.login()
         self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
@@ -321,7 +322,7 @@ class ComWeChatChannel(SlaveChannel):
                 self.logger.error(f"登录出错: {str(e)}")
                 pass
                 
-            time.sleep(10)
+            time.sleep(self.qrcode_timeout)
 
     def get_qrcode(self):
         result = self.bot.GetQrcodeImage()
