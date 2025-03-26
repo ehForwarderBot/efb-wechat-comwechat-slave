@@ -609,7 +609,7 @@ class ComWeChatChannel(SlaveChannel):
             msg.file = f
             msg.file.name = "语音留言.mp3"
             msg.type = MsgType.Video
-            msg.filename = os.path.basename(outputfile)
+            msg.filename = os.path.basename(f.name)
 
         if msg.type in [MsgType.Text]:
             if msg.text.startswith('/changename'):
