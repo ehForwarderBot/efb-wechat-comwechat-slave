@@ -40,6 +40,9 @@ from io import BytesIO
 from PIL import Image
 from pyqrcode import QRCode
 
+QUOTE_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr /></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
+QUOTE_GROUP_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr>%s</chatusr></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
+
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
     channel_emoji : str = "💻"
@@ -606,7 +609,7 @@ class ComWeChatChannel(SlaveChannel):
             msg.file = f
             msg.file.name = "语音留言.mp3"
             msg.type = MsgType.Video
-            msg.filename = os.path.basename(outputfile)
+            msg.filename = os.path.basename(f.name)
 
         if msg.type in [MsgType.Text]:
             if msg.text.startswith('/changename'):
@@ -696,17 +699,9 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     self.bot.SendText(wxid = chat_uid , msg = msg.text)
             else:
-                text = msg.text
-                if isinstance(msg.target, Message):
-                        qt_txt = msg.target.text or msg.target.type.name
-                        if self.group_members.get(msg.chat.uid, None) is not None and not isinstance(msg.target.author, SelfChatMember):
-                            tgt_alias = "@%s\u2005：" % msg.target.author.display_name
-                        else:
-                            tgt_alias = ""
-                        text = qutoed_text(qt_txt, msg.text, tgt_alias)
-                res = self.bot.SendText(wxid = chat_uid , msg = text)
+                res = self.send_text(wxid = chat_uid , msg = msg)
         elif msg.type in [MsgType.Link]:
-            self.bot.SendText(wxid = chat_uid , msg = msg.text)
+            self.send_text(wxid = chat_uid , msg = msg)
         elif msg.type in [MsgType.Image , MsgType.Sticker]:
             name = os.path.basename(msg.file.name)
             local_path =f"{self.dir}{self.wxid}/{name}"
@@ -715,7 +710,7 @@ class ComWeChatChannel(SlaveChannel):
             res = self.bot.SendImage(receiver = chat_uid , img_path = img_path)
             self.delete_file[local_path] = int(time.time())
             if msg.text:
-                self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                self.send_text(wxid = chat_uid , msg = msg)
         elif msg.type in [MsgType.File , MsgType.Video]:
             name = os.path.basename(msg.file.name)
             local_path = f"{self.dir}{self.wxid}/{name}"
@@ -731,7 +726,7 @@ class ComWeChatChannel(SlaveChannel):
             res = self.bot.SendFile(receiver = chat_uid , file_path = file_path)
             self.delete_file[local_path] = int(time.time())
             if msg.text:
-                self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                self.send_text(wxid = chat_uid , msg = msg)
             if msg.type == MsgType.Video:
                 res["msg"] = 1
         elif msg.type in [MsgType.Animation]:
@@ -742,7 +737,7 @@ class ComWeChatChannel(SlaveChannel):
             res = self.bot.SendEmotion(wxid = chat_uid , img_path = file_path)
             self.delete_file[local_path] = int(time.time())
             if msg.text:
-                self.bot.SendText(wxid = chat_uid , msg = msg.text)
+                self.send_text(wxid = chat_uid , msg = msg)
 
         try:
             if str(res["msg"]) == "0":
@@ -750,6 +745,22 @@ class ComWeChatChannel(SlaveChannel):
         except:
             ...
         return msg
+
+    def send_text(self, wxid: ChatID, msg: Message) -> 'Message':
+        text = msg.text
+        if isinstance(msg.target, Message):
+                if isinstance(msg.target.author, SelfChatMember):
+                    qt_txt = msg.target.text or msg.target.type.name
+                    text = qutoed_text(qt_txt, msg.text)
+                else:
+                    msgid = msg.target.uid
+                    sender = msg.target.author.uid
+                    if "@chatroom" in msg.author.chat.uid:
+                        xml = QUOTE_GROUP_MESSAGE % (text, msgid, sender, msg.author.chat.uid, self.wxid)
+                    else:
+                        xml = QUOTE_MESSAGE % (text, msgid, sender, self.wxid)
+                    return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
+        return self.bot.SendText(wxid = wxid , msg = text)
 
     def get_chat_picture(self, chat: 'Chat') -> BinaryIO:
         wxid = chat.uid
