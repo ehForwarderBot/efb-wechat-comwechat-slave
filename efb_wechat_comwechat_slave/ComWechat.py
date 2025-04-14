@@ -3,8 +3,6 @@ import time
 import threading
 from traceback import print_exc
 from pydub import AudioSegment
-import qrcode
-from pyzbar.pyzbar import decode as pyzbar_decode
 import os
 import base64
 from pathlib import Path
@@ -38,7 +36,6 @@ from rich.console import Console
 from rich import print as rprint
 from io import BytesIO
 from PIL import Image
-from pyqrcode import QRCode
 
 QUOTE_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr /></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
 QUOTE_GROUP_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr>%s</chatusr></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
@@ -76,20 +73,19 @@ class ComWeChatChannel(SlaveChannel):
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
         self.bot = WeChatRobot()
 
-        self.qr_url = ""
-        self.master_qr_picture_id: Optional[str] = None
-        self.user_auth_chat = SystemChat(channel=self,
-                                    name="EWS User Auth",
-                                    uid=ChatID("__ews_user_auth__"))
+        self.qr_file = None
 
         self.qrcode_timeout = self.config.get("qrcode_timeout", 10)
-        self.login()
-        self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+        self.wxid = None
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
         self.dir = self.config["dir"]
         if not self.dir.endswith(os.path.sep):
             self.dir += os.path.sep
         ChatMgr.slave_channel = self
+        self.user_auth_chat = ChatMgr.build_efb_chat_as_system_user(EFBSystemUser(
+            uid = self.channel_name,
+            name = self.channel_name,
+        ))
 
         @self.bot.on("self_msg")
         def on_self_msg(msg : Dict):
@@ -306,26 +302,12 @@ class ComWeChatChannel(SlaveChannel):
             # 暂时屏蔽
             self.system_msg(content)
 
-    def login(self):
-        self.master_qr_picture_id = None
-        # 每隔 10 秒检查一次登录状态
-        while True:
-            try:
-                response = self.bot.IsLoginIn()
-                if response.get("is_login", 0) == 1:
-                    print(f"登录成功", flush=True)
-                    break
-                
-                # 获取二维码并检查返回结果
-                if self.get_qrcode():
-                    print(f"已经登录", flush=True)
-                    break
-                    
-            except Exception as e:
-                self.logger.error(f"登录出错: {str(e)}")
-                pass
-                
-            time.sleep(self.qrcode_timeout)
+    def is_login(self) -> bool:
+        try:
+            response = self.bot.IsLoginIn()
+            return response.get("is_login", 0) == 1
+        except:
+            return False
 
     def get_qrcode(self):
         result = self.bot.GetQrcodeImage()
@@ -333,34 +315,14 @@ class ComWeChatChannel(SlaveChannel):
         # 检查是否返回了 JSON 数据（已登录）
         try:
             json_result = json.loads(result)
-            if isinstance(json_result, dict):
-                if json_result.get("result") == "OK":
-                    return True
+            return None
         except Exception:
-            pass
-            
-        file = self.save_qr_code(result)
-        if not file:
-            return False
-            
-        url = self.decode_qr_code(file)
-        if not url:
-            os.unlink(file.name)  # 删除临时文件
-            return False
-            
-        if self.qr_url != url:
-            self.qr_url = url
-            self.console_qr_code(url)
-            # self.master_qr_code(file)
-            
-        # 在使用完成后删除临时文件
-        os.unlink(file.name)
-        return False
+            return self.save_qr_code(result)
 
     @staticmethod
     def save_qr_code(qr_code):
         # 创建临时文件保存二维码图片
-        tmp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+        tmp_file = tempfile.NamedTemporaryFile(suffix='.png')
         try:
             tmp_file.write(qr_code)
             tmp_file.flush()
@@ -368,57 +330,75 @@ class ComWeChatChannel(SlaveChannel):
             print("[red]获取二维码失败[/red]", flush=True)
             tmp_file.close()
             return None
-        tmp_file.close()
         return tmp_file
 
-    @staticmethod
-    def decode_qr_code(file):
-        # 从临时文件读取图片并解码二维码数据
-        qr_img = Image.open(file.name)
+    def login_prompt(self):
+        file = self.get_qrcode()
+        chat = self.user_auth_chat
         try:
-            return pyzbar_decode(qr_img)[0].data.decode('utf-8')
-        except IndexError:
-            # 如果解码失败，直接使用图片数据
-            print("[yellow]无法解析二维码数据，但二维码图片已保存[/yellow]", flush=True)
-
-    @staticmethod
-    def console_qr_code(url):
-        # 使用 qrcode 创建一个新的二维码实例
-        qr = qrcode.QRCode(
-            version=None,  # 自动选择合适的版本
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=1,    # 每个 QR 模块的像素大小
-            border=1       # 二维码边框大小
+            author = chat.get_member(SystemChatMember.SYSTEM_ID)
+        except KeyError:
+            author = chat.add_system_member()
+        msg = Message(
+            type=MsgType.Text,
         )
-        qr.add_data(url)
-        qr.make(fit=True)  # 自动调整大小
-        
-        # 使用 rich 打印彩色提示
-        console = Console()
-        console.print("\n[bold green]请扫描以下二维码登录微信：[/bold green]")
-        # 在终端打印二维码
-        qr.print_ascii(invert=True)
+        msg.uid=int(time.time())
 
-    # TODO master 还未初始化
-    # def master_qr_code(self, file):
-    #     msg = Message(
-    #         type=MsgType.Text,
-    #         chat=self.user_auth_chat,
-    #         author=self.user_auth_chat.other,
-    #         deliver_to=coordinator.master,
-    #     )
-    #     msg.type = MsgType.Image
-    #     msg.text = self._("QR code expired, please scan the new one.")
-    #     msg.path = Path(file.name)
-    #     msg.file = file
-    #     msg.mime = 'image/png'
-    #     if self.master_qr_picture_id is not None:
-    #         msg.edit = True
-    #         msg.edit_media = True
-    #         msg.uid = self.master_qr_picture_id
-    #     else:
-    #         self.master_qr_picture_id = msg.uid
-    #     coordinator.send_message(msg)
+        if not file:
+            is_login = self.is_login()
+            if is_login:
+                msg.text = "登录成功"
+            else:
+                msg.text = "登录失败，未知错误，请使用 /extra 重新尝试登录"
+        else:
+            msg.commands = MessageCommands([
+                MessageCommand(
+                    name=("Confirm"),
+                    callable_name="confirm_login",
+                    args=[msg.uid],
+                ),
+            ])
+            msg.type = MsgType.Image
+            msg.path = Path(file.name)
+            msg.file = file
+            msg.mime = 'image/png'
+        self.send_efb_msgs(msg, chat=chat, author=author)
+
+    def confirm_login(self, previous_message_id):
+        chat = self.user_auth_chat
+        try:
+            author = chat.get_member(SystemChatMember.SYSTEM_ID)
+        except KeyError:
+            author = chat.add_system_member()
+        msg = Message(
+            type=MsgType.Text,
+            uid=previous_message_id,
+        )
+        msg.edit_media = True
+        if self.is_login():
+            self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+            self.GetContactListBySql()
+            self.GetGroupListBySql()
+            msg.text = "登录成功"
+        else:
+            msg.text = "登录失败，请使用 /extra 重新尝试登录"
+        self.send_efb_msgs(msg, chat=chat, author=author)
+
+    @efb_utils.extra(name="Get QR Code",
+           desc="重新扫码登录")
+    def reauth(self, _: str = "") -> str:
+        self.login_prompt()
+        return "扫码成功之后，请点击 confirm 进行下一步"
+
+    @efb_utils.extra(name="Force Logout",
+           desc="强制退出")
+    def force_logout(self, _: str = "") -> str:
+        res = self.bot.post(44, params=EmptyJsonResponse())
+        if self.is_login():
+            return "退出失败，原因: %s" % res
+        else:
+            self.wxid = None
+            return "退出成功"
 
     @staticmethod
     def send_efb_msgs(efb_msgs: Union[Message, List[Message]], **kwargs):
@@ -566,27 +546,28 @@ class ComWeChatChannel(SlaveChannel):
 
     # 定时任务
     def scheduled_job(self):
-        count = 1
+        count = 0
+        content = {
+            "name": self.channel_name,
+            "sender": self.channel_name,
+            "message": "检测到未登录状态，请发送 /extra 重新扫码登录",
+        }
         while True:
             time.sleep(1)
-            if count % 1800 == 1:
+            count += 1
+            if count % 1800 == 0:
                 self.GetGroupListBySql()
                 self.GetContactListBySql()
-                count = 1
-            else:
-                count += 1
+            if count % 1800 == 3:
+                if getattr(coordinator, 'master', None) is not None and not self.is_login():
+                    self.system_msg(content)
 
     #获取全部联系人
     def get_chats(self) -> Collection['Chat']:
-        if not self.friends and not self.groups:
-            self.GetContactListBySql()
-        return self.groups + self.friends
+        return []
 
     #获取联系人
     def get_chat(self, chat_uid: ChatID) -> 'Chat':
-        if not self.friends and not self.groups:
-            self.GetContactListBySql()
-
         if "@chatroom" in chat_uid:
             for group in self.groups:
                 if group.uid == chat_uid:
@@ -595,6 +576,7 @@ class ComWeChatChannel(SlaveChannel):
             for friend in self.friends:
                 if friend.uid == chat_uid:
                     return friend
+        return self.user_auth_chat
 
     #发送消息
     def send_message(self, msg : Message) -> Message:
@@ -602,6 +584,20 @@ class ComWeChatChannel(SlaveChannel):
 
         if msg.edit:
             pass     # todo
+
+        if self.wxid is None:
+            if self.is_login():
+                self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+                self.GetContactListBySql()
+                self.GetGroupListBySql()
+            else:
+                content = {
+                    "name": self.channel_name,
+                    "sender": self.channel_name,
+                    "message": "尚未登录，请发送 /extra 扫码登录"
+                }
+                self.system_msg(content)
+                return msg
 
         if msg.type == MsgType.Voice:
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
@@ -783,7 +779,14 @@ class ComWeChatChannel(SlaveChannel):
         timer.daemon = True
         timer.start()
 
-        self.bot.run(main_thread = False)
+        while True:
+            time.sleep(1)
+            try:
+                #防止偶尔 comwechat 启动落后
+                if self.bot.run(main_thread = False) is not None:
+                    break
+            except Exception as e:
+                self.logger.error("Start failed. Reason: %s" % e)
 
         t = threading.Thread(target = self.handle_file_msg)
         t.daemon = True
@@ -815,6 +818,9 @@ class ComWeChatChannel(SlaveChannel):
 
     #定时更新 Start
     def GetContactListBySql(self):
+        #如果没登录调用 GetContactListBySql 会让 comwechat 挂掉
+        if self.wxid is None:
+            return
         self.groups = []
         self.friends = []
         contacts = self.bot.GetContactListBySql()
@@ -840,7 +846,11 @@ class ComWeChatChannel(SlaveChannel):
                 self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
 
     def GetGroupListBySql(self):
+        if self.wxid is None:
+            return
         self.group_members = self.bot.GetAllGroupMembersBySql()
     #定时更新 End
 
-
+class EmptyJsonResponse:
+    def json(self):
+        return {}
