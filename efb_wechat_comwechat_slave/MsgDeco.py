@@ -5,10 +5,13 @@ from functools import partial
 from traceback import print_exc
 import re , json
 
-from ehforwarderbot import MsgType, Chat
+from ehforwarderbot import MsgType, Chat, coordinator
 from ehforwarderbot.chat import ChatMember
 from ehforwarderbot.message import Substitutions, Message, LinkAttribute, LocationAttribute
 from ehforwarderbot.types import MessageID
+
+from .ChatMgr import ChatMgr
+from .CustomTypes import EFBGroupChat, EFBPrivateChat
 
 QUOTE_DIVIDER = " - - - - - - - - - - - - - - - "
 
@@ -394,7 +397,8 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
             e = xml.xpath('/msg/appmsg/refermsg/svrid/text()') # 被引用消息 id
             refer_svrid = len(e) > 0 and e[0] or None
-            # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/fromusr/text()')[0] # 被引用消息所在房间
+            e = xml.xpath('/msg/appmsg/refermsg/fromusr/text()') # 被引用消息所在房间
+            refer_fromusr = len(e) > 0 and e[0] or None
             e = xml.xpath('/msg/appmsg/refermsg/chatusr/text()') # 被引用消息发送人微信号
             refer_chatusr = len(e) > 0 and e[0] or None
             e = xml.xpath('/msg/appmsg/refermsg/displayname/text()') # 被引用消息发送人微信名称
@@ -405,9 +409,26 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 vendor_specific={ "is_refer": True }
             )
             prefix = ""
+            if "@chatroom" in refer_fromusr:
+                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
+                    uid = refer_fromusr,
+                ))
+            else:
+                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                    uid = refer_chatusr,
+                ))
+            sent_by_master = True
+            if refer_svrid is not None:
+                try:
+                    # 从 master channel 中根据微信 id 查找，如果找到说明是由 comwechat self_msg 发送过去的
+                    master_message = coordinator.master.get_message_by_id(chat=chat, msg_id=refer_svrid)
+                    if master_message is not None:
+                        sent_by_master = False
+                except:
+                    pass
             if refer_displayname is not None:
                 prefix = f"{refer_displayname}:"
-            if refer_svrid is None or refer_chatusr == message["self"]:
+            if refer_svrid is None or (refer_chatusr == message["self"] and sent_by_master):
                 if refer_msgType == 1: # 被引用的消息是文本
                     refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
                     result_text = qutoed_text(refer_content, msg, prefix)

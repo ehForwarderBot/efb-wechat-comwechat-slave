@@ -749,7 +749,7 @@ class ComWeChatChannel(SlaveChannel):
     def send_text(self, wxid: ChatID, msg: Message) -> 'Message':
         text = msg.text
         if isinstance(msg.target, Message):
-                if isinstance(msg.target.author, SelfChatMember):
+                if isinstance(msg.target.author, SelfChatMember) and isinstance(msg.target.deliver_to, SlaveChannel):
                     qt_txt = msg.target.text or msg.target.type.name
                     text = qutoed_text(qt_txt, msg.text)
                 else:
