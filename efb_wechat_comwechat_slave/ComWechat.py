@@ -670,7 +670,10 @@ class ComWeChatChannel(SlaveChannel):
                 res = self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
             elif msg.text.startswith('/at'):
                 users_message = msg.text[4::].split(' ', 1)
-                if len(users_message) == 2:
+                if isinstance(msg.target, Message):
+                    users = msg.target.author.uid
+                    message = msg.text[4::]
+                elif len(users_message) == 2:
                     users, message = users_message
                 else:
                     users, message = users_message[0], ''
