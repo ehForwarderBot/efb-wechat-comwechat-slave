@@ -623,7 +623,7 @@ class ComWeChatChannel(SlaveChannel):
                         name = self.contacts[wxid]
                     except:
                         try:
-                            name = self.bot.GetChatroomMemberNickname(chatroom_id = chat_uid, wxid = wxid)
+                            name = self.bot.GetChatroomMemberNickname(chatroom_id = chat_uid, wxid = wxid)['nickname'] or wxid
                         except:
                             name = wxid
                     message += '\n' + wxid + ' : ' + name
