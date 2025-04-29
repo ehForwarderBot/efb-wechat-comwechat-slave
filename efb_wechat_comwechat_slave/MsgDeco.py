@@ -20,7 +20,7 @@ def qutoed_text(qutoed_text: str, text: str, prefix: str = "") -> str:
         qutoed_text = qutoed_text.split(QUOTE_DIVIDER)[-1]
     return f"「{prefix}{qutoed_text}」\n{QUOTE_DIVIDER}\n{text}"
 
-def parse_chat_history(xml) -> list[dict]:
+def parse_chat_history(xml, level: int = 1) -> list[dict]:
     res = []
     datalist_element = xml.find('.//datalist')
     if datalist_element is not None:
@@ -47,10 +47,11 @@ def parse_chat_history(xml) -> list[dict]:
                     './/sourceheadurl') is not None else '',
                 'datadesc': dataitem.find('.//datadesc').text if dataitem.find(
                     './/datadesc') is not None else '',
+                'children': [],
             }
 
             prefix = f"{data['sourcename']}: "
-            count = 8
+            count = 8 * level
             if data['datatype'] == '1':
                 data['placeholder'] = data['datadesc']
             elif data['datatype'] == '2':
@@ -63,8 +64,9 @@ def parse_chat_history(xml) -> list[dict]:
                 data['placeholder'] = f"[File] {data['datatitle']}"
             elif data['datatype'] == '17':
                 data['placeholder'] = f"\n{' ' * count}[Chat History]"
-                for i in parse_chat_history(dataitem.find('recordxml/recordinfo')):
+                for i in parse_chat_history(dataitem.find('recordxml/recordinfo'), level + 1):
                     data['placeholder'] += f"\n{' ' * count}{i['formatted']}"
+                    data['children'] = i
                 data['placeholder'] += f"\n{' ' * count}[Chat History]"
             elif data['datatype'] == '19':
                 data['placeholder'] = f"[Mini Program] {data['datatitle']}"
