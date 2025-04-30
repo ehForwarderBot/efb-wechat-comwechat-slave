@@ -440,6 +440,8 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                         if type == 57:
                             refer_msg_text = refer_msg_xml.xpath('/msg/appmsg/title/text()')[0]
                             result_text = qutoed_text(refer_msg_text, msg, prefix)
+                        else:
+                            result_text = msg
                     except Exception as e:
                         print_exc()
                 else: # 被引用的消息非文本，提示不支持
