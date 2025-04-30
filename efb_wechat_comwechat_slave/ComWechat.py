@@ -497,7 +497,7 @@ class ComWeChatChannel(SlaveChannel):
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
-        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
+        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def handle_file_msg(self):
         while True:
