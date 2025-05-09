@@ -31,6 +31,11 @@ def MsgProcess(msg : dict , chat) -> Union[Message, List[Message]]:
     elif msg["type"] == "sysmsg":
         if "<revokemsg>" in msg["message"]:  # 重复的撤回通知，不在此处处理
             return
+        index = msg["message"].find("tickled me")
+        if index != -1:
+            at_list = {}
+            at_list[(index + 9 , index + 11)] = chat.self
+            return efb_text_simple_wrapper("[" + msg['message'] + "]", at_list)
         return efb_text_simple_wrapper("[" + msg['message'] + "]")
 
     elif msg["type"] == "image":
