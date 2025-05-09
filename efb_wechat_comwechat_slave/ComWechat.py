@@ -61,6 +61,7 @@ class ComWeChatChannel(SlaveChannel):
     cache =  TTLCache(maxsize=200, ttl= time_out)  # 缓存发送过的消息ID
     file_msg : Dict = {}                           # 存储待修改的文件类消息 {path : msg}
     delete_file : Dict = {}                        # 存储待删除的消息 {path : time}
+    forward_pattern = r"ehforwarderbot:\/\/([^/]+)\/forward\/(\d+)"
 
     __version__ = version.__version__
     logger: logging.Logger = logging.getLogger("comwechat")
@@ -457,6 +458,8 @@ class ComWeChatChannel(SlaveChannel):
             msg.commands = MessageCommands(content["commands"])
         if "message" in content:
             msg.text = content['message']
+        if "target" in content:
+            msg.target = content['target']
 
         self.send_efb_msgs(msg, uid=int(time.time()), chat=chat, author=author, type=MsgType.Text)
 
@@ -603,6 +606,17 @@ class ComWeChatChannel(SlaveChannel):
         if msg.edit:
             pass     # todo
 
+        if msg.text:
+            match = re.search(self.forward_pattern, msg.text)
+            if match:
+                if match.group(1) == self.channel_id:
+                    msgid = match.group(2)
+                    self.logger.debug(f"提取到的消息 ID: {msgid}")
+                    self.bot.ForwardMessage(wxid = chat_uid, msgid = msgid)
+                else:
+                    self.logger.debug(f"非本 slave 消息: {match.group(1)}/{match.group(2)}")
+                return msg
+
         if msg.type == MsgType.Voice:
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
             AudioSegment.from_ogg(msg.file.name).export(f, format="mp3")
@@ -668,6 +682,26 @@ class ComWeChatChannel(SlaveChannel):
             elif msg.text.startswith('/addtogroup'):
                 users = msg.text[12::]
                 res = self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
+            elif msg.text.startswith('/forward'):
+                if isinstance(msg.target, Message):
+                    msgid = msg.target.uid
+                    if msgid.isdecimal():
+                        url = f"ehforwarderbot://{self.channel_id}/forward/{msgid}"
+                        prompt = "请将这条信息转发到目标聊天中"
+                        text = f"{url}\n{prompt}"
+                        if msg.target.text:
+                            match = re.search(self.forward_pattern, msg.target.text)
+                            if match:
+                                msg.target.text = f"{msg.target.text[0:match.start()]}{text}"
+                            else:
+                                msg.target.text = f"{msg.target.text}\n\n---\n{text}"
+                        else:
+                            msg.target.text = text
+                        self.send_efb_msgs(msg.target, edit=True)
+                    else:
+                        text = f"无法转发{msgid},不是有效的微信消息"
+                        self.system_msg({'sender': chat_uid, 'message': text, 'target': msg.target})
+                    return msg
             elif msg.text.startswith('/at'):
                 users_message = msg.text[4::].split(' ', 1)
                 if isinstance(msg.target, Message):
