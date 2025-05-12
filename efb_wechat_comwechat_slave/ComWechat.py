@@ -11,7 +11,7 @@ from pathlib import Path
 
 import re
 import json
-from ehforwarderbot.chat import SystemChat, PrivateChat , SystemChatMember, ChatMember, SelfChatMember
+from ehforwarderbot.chat import SystemChat, PrivateChat , GroupChat, SystemChatMember, ChatMember, SelfChatMember
 from typing import Tuple, Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
@@ -30,9 +30,9 @@ from ehforwarderbot.status import MessageRemoval
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
-from .MsgDeco import qutoed_text
+from .MsgDeco import qutoed_text, efb_image_wrapper, efb_file_wrapper, efb_voice_wrapper, efb_video_wrapper
 from .MsgProcess import MsgProcess
-from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
+from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION, load_local_file_to_temp
 
 from rich.console import Console
 from rich import print as rprint
@@ -510,14 +510,32 @@ class ComWeChatChannel(SlaveChannel):
                 for path in list(self.file_msg.keys()):
                     flag = False
                     msg = self.file_msg[path][0]
-                    author = self.file_msg[path][1]
-                    chat = self.file_msg[path][2]
+                    author: ChatMember = self.file_msg[path][1]
+                    chat : Chat= self.file_msg[path][2]
+                    commands = []
                     if os.path.exists(path):
                         flag = True
                     elif (int(time.time()) - msg["timestamp"]) > self.time_out:
                         msg_type = msg["type"]
                         msg['message'] = f"[{msg_type} 下载超时,请在手机端查看]"
                         msg["type"] = "text"
+                        chattype = "Unknown"
+                        if isinstance(chat, GroupChat):
+                            chattype = "group"
+                        elif isinstance(chat, PrivateChat):
+                            chattype = "private"
+                        commands.append(
+                            MessageCommand(
+                                name=("Retry"),
+                                callable_name="retry_download",
+                                kwargs={
+                                    "msgid": msg["msgid"],
+                                    "msgtype": msg_type,
+                                    "chattype": chattype,
+                                    "chatuid": chat.uid,
+                                },
+                            )
+                        )
                         flag = True
                     elif msg["type"] == "voice":
                         sql = f'SELECT Buf FROM Media WHERE Reserved0 = {msg["msgid"]}'
@@ -531,8 +549,10 @@ class ComWeChatChannel(SlaveChannel):
                             flag = True
 
                     if flag:
+                        m = MsgProcess(msg, chat)
+                        m.commands = MessageCommands(commands)
                         del self.file_msg[path]
-                        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
+                        self.send_efb_msgs(m, author=author, chat=chat, uid=msg['msgid'])
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
@@ -544,6 +564,47 @@ class ComWeChatChannel(SlaveChannel):
                         except:
                             pass
                         del self.delete_file[file_path]
+
+    def retry_download(self, msgid, msgtype, chattype, chatuid):
+        try:
+            res = self.bot.GetCdn(msgid=msgid)
+            if res["msg"] == 1:
+                path = res["path"].replace("\\","/").replace("C:/users/user/My Documents/WeChat Files/", self.dir )
+                count = 1
+                while True:
+                    if os.path.exists(path):
+                        break
+                    elif count > self.time_out:
+                        self.logger.warning(f"Timeout when retrying download {msgid}.")
+                        return
+                    count += 1
+                    time.sleep(1)
+
+                file = load_local_file_to_temp(path)
+                if msgtype == "image":
+                    efb_msgs = efb_image_wrapper(file)
+                elif msgtype == "share":
+                    efb_msgs = efb_file_wrapper(file, os.path.basename(path))
+                elif msgtype == "voice":
+                    efb_msgs = efb_voice_wrapper(file , file.name + ".ogg")
+                elif msgtype == "video":
+                    efb_msgs = efb_video_wrapper(file)
+                if chattype == "group":
+                    c = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
+                        uid = chatuid,
+                    ))
+                elif chattype == "private":
+                    c = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                        uid = chatuid
+                    ))
+                else:
+                    self.logger.warning(f"Unknown chat type {chattype} when retrying download {msgid}.")
+                    return
+                master_message = coordinator.master.get_message_by_id(chat=c, msg_id=msgid)
+                efb_msgs = [efb_msgs] if isinstance(efb_msgs, Message) else efb_msgs
+                self.send_efb_msgs(efb_msgs, uid=msgid, author=master_message.author, chat=master_message.chat, edit=True, edit_media=True)
+        except Exception as e:
+            self.logger.warning(f"Error occurred when retrying download {msgid}. {e}")
 
     def process_friend_request(self , v3 , v4):
         self.logger.debug(f"process_friend_request:{v3} {v4}")
