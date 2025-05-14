@@ -24,7 +24,7 @@ from . import __version__ as version
 from ehforwarderbot.channel import SlaveChannel
 from ehforwarderbot.types import MessageID, ChatID, InstanceID
 from ehforwarderbot import utils as efb_utils
-from ehforwarderbot.exceptions import EFBException
+from ehforwarderbot.exceptions import EFBException, EFBChatNotFound
 from ehforwarderbot.message import MessageCommand, MessageCommands
 from ehforwarderbot.status import MessageRemoval
 
@@ -598,6 +598,7 @@ class ComWeChatChannel(SlaveChannel):
             for friend in self.friends:
                 if friend.uid == chat_uid:
                     return friend
+        raise EFBChatNotFound
 
     #发送消息
     def send_message(self, msg : Message) -> Message:
