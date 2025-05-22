@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import json
 from ehforwarderbot.chat import SystemChat, PrivateChat , SystemChatMember, ChatMember, SelfChatMember
+import hashlib
 from typing import Tuple, Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
@@ -609,7 +610,7 @@ class ComWeChatChannel(SlaveChannel):
         if msg.text:
             match = re.search(self.forward_pattern, msg.text)
             if match:
-                if match.group(1) == self.channel_id:
+                if match.group(1) == hashlib.md5(self.channel_id.encode('utf-8')).hexdigest():
                     msgid = match.group(2)
                     self.logger.debug(f"提取到的消息 ID: {msgid}")
                     self.bot.ForwardMessage(wxid = chat_uid, msgid = msgid)
@@ -686,7 +687,7 @@ class ComWeChatChannel(SlaveChannel):
                 if isinstance(msg.target, Message):
                     msgid = msg.target.uid
                     if msgid.isdecimal():
-                        url = f"ehforwarderbot://{self.channel_id}/forward/{msgid}"
+                        url = f"ehforwarderbot://{hashlib.md5(self.channel_id.encode('utf-8')).hexdigest()}/forward/{msgid}"
                         prompt = "请将这条信息转发到目标聊天中"
                         text = f"{url}\n{prompt}"
                         if msg.target.text:
