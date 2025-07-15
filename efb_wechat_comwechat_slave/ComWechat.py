@@ -115,7 +115,7 @@ QUOTE_MESSAGE="""<msg>
             <type>1</type>
             <svrid>%s</svrid>
             <fromusr>%s</fromusr>
-            <chatusr />
+            <chatusr>%s</chatusr>
             <displayname>%s</displayname>
             <content>%s</content>
         </refermsg>
@@ -896,12 +896,12 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
-                    displayname = msg.target.author.display_name
+                    displayname = msg.target.author.name
                     content = escape(msg.target.vendor_specific.get("wx_xml", ""))
                     if "@chatroom" in msg.author.chat.uid:
                         xml = QUOTE_GROUP_MESSAGE % (self.wxid, text, msgid, sender, msg.author.chat.uid, displayname, content)
                     else:
-                        xml = QUOTE_MESSAGE % (self.wxid, text, msgid, sender, displayname, content)
+                        xml = QUOTE_MESSAGE % (self.wxid, text, msgid, sender, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 
