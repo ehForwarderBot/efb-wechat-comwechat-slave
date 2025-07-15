@@ -35,115 +35,13 @@ from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystem
 from .MsgDeco import qutoed_text
 from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
+from .Constant import QUOTE_MESSAGE, QUOTE_GROUP_MESSAGE
 
 from rich.console import Console
 from rich import print as rprint
 from io import BytesIO
 from PIL import Image
 from pyqrcode import QRCode
-
-QUOTE_GROUP_MESSAGE="""<msg>
-    <fromusername>%s</fromusername>
-    <scene>0</scene>
-    <commenturl></commenturl>
-    <appmsg appid="" sdkver="0">
-        <title>%s</title>
-        <des></des>
-        <action>view</action>
-        <type>57</type>
-        <showtype>0</showtype>
-        <content></content>
-        <url></url>
-        <dataurl></dataurl>
-        <lowurl></lowurl>
-        <lowdataurl></lowdataurl>
-        <recorditem></recorditem>
-        <thumburl></thumburl>
-        <messageaction></messageaction>
-        <refermsg>
-            <type>1</type>
-            <svrid>%s</svrid>
-            <fromusr>%s</fromusr>
-            <chatusr>%s</chatusr>
-            <displayname>%s</displayname>
-            <content>%s</content>
-        </refermsg>
-        <extinfo></extinfo>
-        <sourceusername></sourceusername>
-        <sourcedisplayname></sourcedisplayname>
-        <commenturl></commenturl>
-        <appattach>
-            <totallen>0</totallen>
-            <attachid></attachid>
-            <emoticonmd5></emoticonmd5>
-            <fileext></fileext>
-            <aeskey></aeskey>
-        </appattach>
-        <weappinfo>
-            <pagepath></pagepath>
-            <username></username>
-            <appid></appid>
-            <appservicetype>0</appservicetype>
-        </weappinfo>
-        <websearch />
-    </appmsg>
-    <appinfo>
-        <version>1</version>
-        <appname>Window wechat</appname>
-    </appinfo>
-</msg>
-"""
-QUOTE_MESSAGE="""<msg>
-    <fromusername>%s</fromusername>
-    <scene>0</scene>
-    <commenturl></commenturl>
-    <appmsg appid="" sdkver="0">
-        <title>%s</title>
-        <des></des>
-        <action>view</action>
-        <type>57</type>
-        <showtype>0</showtype>
-        <content></content>
-        <url></url>
-        <dataurl></dataurl>
-        <lowurl></lowurl>
-        <lowdataurl></lowdataurl>
-        <recorditem></recorditem>
-        <thumburl></thumburl>
-        <messageaction></messageaction>
-        <refermsg>
-            <type>1</type>
-            <svrid>%s</svrid>
-            <fromusr>%s</fromusr>
-            <chatusr>%s</chatusr>
-            <displayname>%s</displayname>
-            <content>%s</content>
-        </refermsg>
-        <extinfo></extinfo>
-        <sourceusername></sourceusername>
-        <sourcedisplayname></sourcedisplayname>
-        <commenturl></commenturl>
-        <appattach>
-            <totallen>0</totallen>
-            <attachid></attachid>
-            <emoticonmd5></emoticonmd5>
-            <fileext></fileext>
-            <aeskey></aeskey>
-        </appattach>
-        <weappinfo>
-            <pagepath></pagepath>
-            <username></username>
-            <appid></appid>
-            <appservicetype>0</appservicetype>
-        </weappinfo>
-        <websearch />
-    </appmsg>
-    <appinfo>
-        <version>1</version>
-        <appname>Window wechat</appname>
-    </appinfo>
-</msg>
-"""
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
