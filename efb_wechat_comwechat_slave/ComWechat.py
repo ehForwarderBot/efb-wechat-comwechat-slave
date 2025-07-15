@@ -8,6 +8,7 @@ from pyzbar.pyzbar import decode as pyzbar_decode
 import os
 import base64
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import re
 import json
@@ -41,8 +42,108 @@ from io import BytesIO
 from PIL import Image
 from pyqrcode import QRCode
 
-QUOTE_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr /></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
-QUOTE_GROUP_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr>%s</chatusr></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
+QUOTE_GROUP_MESSAGE="""<msg>
+    <fromusername>%s</fromusername>
+    <scene>0</scene>
+    <commenturl></commenturl>
+    <appmsg appid="" sdkver="0">
+        <title>%s</title>
+        <des></des>
+        <action>view</action>
+        <type>57</type>
+        <showtype>0</showtype>
+        <content></content>
+        <url></url>
+        <dataurl></dataurl>
+        <lowurl></lowurl>
+        <lowdataurl></lowdataurl>
+        <recorditem></recorditem>
+        <thumburl></thumburl>
+        <messageaction></messageaction>
+        <refermsg>
+            <type>1</type>
+            <svrid>%s</svrid>
+            <fromusr>%s</fromusr>
+            <chatusr>%s</chatusr>
+            <displayname>%s</displayname>
+            <content>%s</content>
+        </refermsg>
+        <extinfo></extinfo>
+        <sourceusername></sourceusername>
+        <sourcedisplayname></sourcedisplayname>
+        <commenturl></commenturl>
+        <appattach>
+            <totallen>0</totallen>
+            <attachid></attachid>
+            <emoticonmd5></emoticonmd5>
+            <fileext></fileext>
+            <aeskey></aeskey>
+        </appattach>
+        <weappinfo>
+            <pagepath></pagepath>
+            <username></username>
+            <appid></appid>
+            <appservicetype>0</appservicetype>
+        </weappinfo>
+        <websearch />
+    </appmsg>
+    <appinfo>
+        <version>1</version>
+        <appname>Window wechat</appname>
+    </appinfo>
+</msg>
+"""
+QUOTE_MESSAGE="""<msg>
+    <fromusername>%s</fromusername>
+    <scene>0</scene>
+    <commenturl></commenturl>
+    <appmsg appid="" sdkver="0">
+        <title>%s</title>
+        <des></des>
+        <action>view</action>
+        <type>57</type>
+        <showtype>0</showtype>
+        <content></content>
+        <url></url>
+        <dataurl></dataurl>
+        <lowurl></lowurl>
+        <lowdataurl></lowdataurl>
+        <recorditem></recorditem>
+        <thumburl></thumburl>
+        <messageaction></messageaction>
+        <refermsg>
+            <type>1</type>
+            <svrid>%s</svrid>
+            <fromusr>%s</fromusr>
+            <chatusr />
+            <displayname>%s</displayname>
+            <content>%s</content>
+        </refermsg>
+        <extinfo></extinfo>
+        <sourceusername></sourceusername>
+        <sourcedisplayname></sourcedisplayname>
+        <commenturl></commenturl>
+        <appattach>
+            <totallen>0</totallen>
+            <attachid></attachid>
+            <emoticonmd5></emoticonmd5>
+            <fileext></fileext>
+            <aeskey></aeskey>
+        </appattach>
+        <weappinfo>
+            <pagepath></pagepath>
+            <username></username>
+            <appid></appid>
+            <appservicetype>0</appservicetype>
+        </weappinfo>
+        <websearch />
+    </appmsg>
+    <appinfo>
+        <version>1</version>
+        <appname>Window wechat</appname>
+    </appinfo>
+</msg>
+"""
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
@@ -86,7 +187,8 @@ class ComWeChatChannel(SlaveChannel):
 
         self.qrcode_timeout = self.config.get("qrcode_timeout", 10)
         self.login()
-        self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+        self.me = self.bot.GetSelfInfo()["data"]
+        self.wxid = self.me["wxId"]
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
         self.dir = self.config["dir"]
         if not self.dir.endswith(os.path.sep):
@@ -794,10 +896,12 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
+                    displayname = msg.target.author.display_name
+                    content = escape(msg.target.vendor_specific.get("wx_xml", ""))
                     if "@chatroom" in msg.author.chat.uid:
-                        xml = QUOTE_GROUP_MESSAGE % (text, msgid, sender, msg.author.chat.uid, self.wxid)
+                        xml = QUOTE_GROUP_MESSAGE % (self.wxid, text, msgid, sender, msg.author.chat.uid, displayname, content)
                     else:
-                        xml = QUOTE_MESSAGE % (text, msgid, sender, self.wxid)
+                        xml = QUOTE_MESSAGE % (self.wxid, text, msgid, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 
