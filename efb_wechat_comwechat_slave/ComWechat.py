@@ -8,6 +8,7 @@ from pyzbar.pyzbar import decode as pyzbar_decode
 import os
 import base64
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import re
 import json
@@ -32,17 +33,15 @@ from ehforwarderbot.status import MessageRemoval
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
 from .MsgDeco import qutoed_text
-from .MsgProcess import MsgProcess
+from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
+from .Constant import QUOTE_MESSAGE, QUOTE_GROUP_MESSAGE
 
 from rich.console import Console
 from rich import print as rprint
 from io import BytesIO
 from PIL import Image
 from pyqrcode import QRCode
-
-QUOTE_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr /></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
-QUOTE_GROUP_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr>%s</chatusr></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
@@ -86,7 +85,8 @@ class ComWeChatChannel(SlaveChannel):
 
         self.qrcode_timeout = self.config.get("qrcode_timeout", 10)
         self.login()
-        self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+        self.me = self.bot.GetSelfInfo()["data"]
+        self.wxid = self.me["wxId"]
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
         self.dir = self.config["dir"]
         if not self.dir.endswith(os.path.sep):
@@ -501,7 +501,7 @@ class ComWeChatChannel(SlaveChannel):
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
-        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def handle_file_msg(self):
         while True:
@@ -533,7 +533,7 @@ class ComWeChatChannel(SlaveChannel):
 
                     if flag:
                         del self.file_msg[path]
-                        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
+                        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
@@ -794,10 +794,16 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
-                    if "@chatroom" in msg.author.chat.uid:
-                        xml = QUOTE_GROUP_MESSAGE % (text, msgid, sender, msg.author.chat.uid, self.wxid)
+                    displayname = msg.target.author.name
+                    content = escape(msg.target.vendor_specific.get("wx_xml", ""))
+                    if content:
+                        content = "<content>%s</content>" % content
                     else:
-                        xml = QUOTE_MESSAGE % (text, msgid, sender, self.wxid)
+                        content = "<content />"
+                    if "@chatroom" in msg.author.chat.uid:
+                        xml = QUOTE_GROUP_MESSAGE % (self.wxid, text, msgid, sender, sender, displayname, content)
+                    else:
+                        xml = QUOTE_MESSAGE % (self.wxid, text, msgid, sender, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 

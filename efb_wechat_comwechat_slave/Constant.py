@@ -1,0 +1,102 @@
+QUOTE_GROUP_MESSAGE="""<msg>
+    <fromusername>%s</fromusername>
+    <scene>0</scene>
+    <commenturl></commenturl>
+    <appmsg appid="" sdkver="0">
+        <title>%s</title>
+        <des></des>
+        <action>view</action>
+        <type>57</type>
+        <showtype>0</showtype>
+        <content></content>
+        <url></url>
+        <dataurl></dataurl>
+        <lowurl></lowurl>
+        <lowdataurl></lowdataurl>
+        <recorditem></recorditem>
+        <thumburl></thumburl>
+        <messageaction></messageaction>
+        <refermsg>
+            <type>1</type>
+            <svrid>%s</svrid>
+            <fromusr>%s</fromusr>
+            <chatusr>%s</chatusr>
+            <displayname>%s</displayname>
+            %s
+        </refermsg>
+        <extinfo></extinfo>
+        <sourceusername></sourceusername>
+        <sourcedisplayname></sourcedisplayname>
+        <commenturl></commenturl>
+        <appattach>
+            <totallen>0</totallen>
+            <attachid></attachid>
+            <emoticonmd5></emoticonmd5>
+            <fileext></fileext>
+            <aeskey></aeskey>
+        </appattach>
+        <weappinfo>
+            <pagepath></pagepath>
+            <username></username>
+            <appid></appid>
+            <appservicetype>0</appservicetype>
+        </weappinfo>
+        <websearch />
+    </appmsg>
+    <appinfo>
+        <version>1</version>
+        <appname>Window wechat</appname>
+    </appinfo>
+</msg>
+"""
+QUOTE_MESSAGE="""<msg>
+    <fromusername>%s</fromusername>
+    <scene>0</scene>
+    <commenturl></commenturl>
+    <appmsg appid="" sdkver="0">
+        <title>%s</title>
+        <des></des>
+        <action>view</action>
+        <type>57</type>
+        <showtype>0</showtype>
+        <content></content>
+        <url></url>
+        <dataurl></dataurl>
+        <lowurl></lowurl>
+        <lowdataurl></lowdataurl>
+        <recorditem></recorditem>
+        <thumburl></thumburl>
+        <messageaction></messageaction>
+        <refermsg>
+            <type>1</type>
+            <svrid>%s</svrid>
+            <fromusr>%s</fromusr>
+            <chatusr>%s</chatusr>
+            <displayname>%s</displayname>
+            %s
+        </refermsg>
+        <extinfo></extinfo>
+        <sourceusername></sourceusername>
+        <sourcedisplayname></sourcedisplayname>
+        <commenturl></commenturl>
+        <appattach>
+            <totallen>0</totallen>
+            <attachid></attachid>
+            <emoticonmd5></emoticonmd5>
+            <fileext></fileext>
+            <aeskey></aeskey>
+        </appattach>
+        <weappinfo>
+            <pagepath></pagepath>
+            <username></username>
+            <appid></appid>
+            <appservicetype>0</appservicetype>
+        </weappinfo>
+        <websearch />
+    </appmsg>
+    <appinfo>
+        <version>1</version>
+        <appname>Window wechat</appname>
+    </appinfo>
+</msg>
+"""
