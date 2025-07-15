@@ -22,7 +22,7 @@ QUOTE_GROUP_MESSAGE="""<msg>
             <fromusr>%s</fromusr>
             <chatusr>%s</chatusr>
             <displayname>%s</displayname>
-            <content>%s</content>
+            %s
         </refermsg>
         <extinfo></extinfo>
         <sourceusername></sourceusername>
@@ -73,7 +73,7 @@ QUOTE_MESSAGE="""<msg>
             <fromusr>%s</fromusr>
             <chatusr>%s</chatusr>
             <displayname>%s</displayname>
-            <content>%s</content>
+            %s
         </refermsg>
         <extinfo></extinfo>
         <sourceusername></sourceusername>
