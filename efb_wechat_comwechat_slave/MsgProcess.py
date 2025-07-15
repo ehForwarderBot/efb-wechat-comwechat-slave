@@ -12,6 +12,16 @@ from lxml import etree
 from ehforwarderbot import utils as efb_utils
 from ehforwarderbot.message import Message
 
+def MsgWrapper(xml, efb_msgs:  Union[Message, List[Message]]):
+    efb_msgs = [efb_msgs] if isinstance(efb_msgs, Message) else efb_msgs
+    if not efb_msgs:
+        return
+    for efb_msg in efb_msgs:
+        vendor_specific = getattr(efb_msg, "vendor_specific", {})
+        vendor_specific["wx_xml"] = xml
+        setattr(efb_msg, "vendor_specific", vendor_specific)
+    return efb_msgs
+
 def MsgProcess(msg : dict , chat) -> Union[Message, List[Message]]:
 
     if msg["type"] == "text":

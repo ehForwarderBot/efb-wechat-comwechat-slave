@@ -32,7 +32,7 @@ from ehforwarderbot.status import MessageRemoval
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
 from .MsgDeco import qutoed_text
-from .MsgProcess import MsgProcess
+from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
 
 from rich.console import Console
@@ -501,7 +501,7 @@ class ComWeChatChannel(SlaveChannel):
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
-        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def handle_file_msg(self):
         while True:
@@ -533,7 +533,7 @@ class ComWeChatChannel(SlaveChannel):
 
                     if flag:
                         del self.file_msg[path]
-                        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
+                        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
