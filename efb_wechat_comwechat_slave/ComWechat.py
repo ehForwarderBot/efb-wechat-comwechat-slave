@@ -799,7 +799,7 @@ class ComWeChatChannel(SlaveChannel):
                         "\n": "&#x0A;",
                         "\t": "&#x09;",
                         '"': "&quot;",
-                    })
+                    }) or msg.target.text
                     comwechat_info = msg.target.vendor_specific.get("comwechat_info", {})
                     if comwechat_info.get("type", None) == "animatedsticker":
                         refer_type = 47
