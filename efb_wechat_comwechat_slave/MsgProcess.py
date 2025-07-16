@@ -12,13 +12,15 @@ from lxml import etree
 from ehforwarderbot import utils as efb_utils
 from ehforwarderbot.message import Message
 
-def MsgWrapper(xml, efb_msgs:  Union[Message, List[Message]]):
+def MsgWrapper(msg, efb_msgs:  Union[Message, List[Message]]):
     efb_msgs = [efb_msgs] if isinstance(efb_msgs, Message) else efb_msgs
     if not efb_msgs:
         return
     for efb_msg in efb_msgs:
         vendor_specific = getattr(efb_msg, "vendor_specific", {})
+        xml = msg.pop("message", None)
         vendor_specific["wx_xml"] = xml
+        vendor_specific["comwechat_info"] = msg
         setattr(efb_msg, "vendor_specific", vendor_specific)
     return efb_msgs
 
