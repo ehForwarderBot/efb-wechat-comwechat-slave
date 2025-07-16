@@ -795,7 +795,11 @@ class ComWeChatChannel(SlaveChannel):
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
                     displayname = msg.target.author.name
-                    content = escape(msg.target.vendor_specific.get("wx_xml", ""))
+                    content = escape(msg.target.vendor_specific.get("wx_xml", ""), {
+                        "\n": "&#x0A;",
+                        "\t": "&#x09;",
+                        '"': "&quot;",
+                    })
                     comwechat_info = msg.target.vendor_specific.get("comwechat_info", {})
                     if comwechat_info.get("type", None) == "animatedsticker":
                         refer_type = 47
