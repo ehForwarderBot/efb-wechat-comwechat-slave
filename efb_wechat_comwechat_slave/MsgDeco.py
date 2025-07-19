@@ -755,6 +755,10 @@ def efb_other_wrapper(text: str) -> Union[Message, None]:
             vendor_specific={ "is_mp": False }
             )
 
+    elif msg_type == "mmchatroombarannouncememt":
+        text = xml.xpath('/sysmsg/mmchatroombarannouncememt/content/text()')[0]
+        efb_msg = efb_text_simple_wrapper(text)
+
     if efb_msg:
         return efb_msg
     else:
