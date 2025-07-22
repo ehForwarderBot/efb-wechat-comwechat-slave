@@ -66,6 +66,9 @@ class ComWeChatChannel(SlaveChannel):
 
     #MsgType.Voice
     supported_message_types = {MsgType.Text, MsgType.Sticker, MsgType.Image , MsgType.Link , MsgType.File , MsgType.Video , MsgType.Animation, MsgType.Voice}
+    self_update_lock = threading.Lock()
+    contact_update_lock = threading.Lock()
+    group_update_lock = threading.Lock()
 
     def __init__(self, instance_id: InstanceID = None):
         super().__init__(instance_id=instance_id)
@@ -374,11 +377,11 @@ class ComWeChatChannel(SlaveChannel):
         msg = Message(
             type=MsgType.Text,
             uid=previous_message_id,
+            edit=True,
+            edit_media = True
         )
-        msg.edit_media = True
         if self.is_login():
-            self.me = self.bot.GetSelfInfo()["data"]
-            self.wxid = self.me["wxId"]
+            self.get_me()
             self.GetContactListBySql()
             self.GetGroupListBySql()
             msg.text = "登录成功"
@@ -560,8 +563,9 @@ class ComWeChatChannel(SlaveChannel):
             time.sleep(1)
             count += 1
             if count % 1800 == 0:
-                self.GetGroupListBySql()
-                self.GetContactListBySql()
+                if self.wxid is not None:
+                    self.GetGroupListBySql()
+                    self.GetContactListBySql()
             if count % 1800 == 3:
                 if getattr(coordinator, 'master', None) is not None and not self.is_login():
                     self.system_msg(content)
@@ -591,7 +595,7 @@ class ComWeChatChannel(SlaveChannel):
 
         if self.wxid is None:
             if self.is_login():
-                self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+                self.get_me()
                 self.GetContactListBySql()
                 self.GetGroupListBySql()
             else:
@@ -860,11 +864,27 @@ class ComWeChatChannel(SlaveChannel):
                 name = wxid
         return name
 
+    @staticmethod
+    def non_blocking_lock_wrapper(lock: threading.Lock) :
+        def wrapper(func):
+            def inner(*args, **kwargs):
+                if not lock.acquire(False):
+                    return
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    lock.release()
+            return inner
+        return wrapper
+
+    @non_blocking_lock_wrapper(contact_update_lock)
+    def get_me(self):
+        self.me = self.bot.GetSelfInfo()["data"]
+        self.wxid = self.me["wxId"]
+
     #定时更新 Start
+    @non_blocking_lock_wrapper(contact_update_lock)
     def GetContactListBySql(self):
-        #如果没登录调用 GetContactListBySql 会让 comwechat 挂掉
-        if self.wxid is None:
-            return
         self.groups = []
         self.friends = []
         contacts = self.bot.GetContactListBySql()
@@ -889,9 +909,8 @@ class ComWeChatChannel(SlaveChannel):
                 )
                 self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
 
+    @non_blocking_lock_wrapper(group_update_lock)
     def GetGroupListBySql(self):
-        if self.wxid is None:
-            return
         self.group_members = self.bot.GetAllGroupMembersBySql()
     #定时更新 End
 
