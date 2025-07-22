@@ -5,10 +5,13 @@ from functools import partial
 from traceback import print_exc
 import re , json
 
-from ehforwarderbot import MsgType, Chat
+from ehforwarderbot import MsgType, Chat, coordinator
 from ehforwarderbot.chat import ChatMember
 from ehforwarderbot.message import Substitutions, Message, LinkAttribute, LocationAttribute
 from ehforwarderbot.types import MessageID
+
+from .ChatMgr import ChatMgr
+from .CustomTypes import EFBGroupChat, EFBPrivateChat
 
 QUOTE_DIVIDER = " - - - - - - - - - - - - - - - "
 
@@ -16,6 +19,64 @@ def qutoed_text(qutoed_text: str, text: str, prefix: str = "") -> str:
     if QUOTE_DIVIDER in qutoed_text:
         qutoed_text = qutoed_text.split(QUOTE_DIVIDER)[-1]
     return f"「{prefix}{qutoed_text}」\n{QUOTE_DIVIDER}\n{text}"
+
+def parse_chat_history(xml, level: int = 1) -> list[dict]:
+    res = []
+    datalist_element = xml.find('.//datalist')
+    if datalist_element is not None:
+        for dataitem in datalist_element.findall('dataitem'):
+            #TODO 想办法下载图片文件等
+            data = {
+                'datatype': dataitem.get('datatype'),
+                # 'dataid': dataitem.get('dataid'),
+                # 'messageuuid': dataitem.find('.//messageuuid').text if dataitem.find('.//messageuuid') is not None else '',
+                # 'cdnthumburl': dataitem.find('.//cdnthumburl').text if dataitem.find('.//cdnthumburl') is not None else '',
+                'datatitle': dataitem.find('.//datatitle').text if dataitem.find(
+                    './/datatitle') is not None else '',
+                'sourcetime': dataitem.find('.//sourcetime').text if dataitem.find(
+                    './/sourcetime') is not None else '',
+                # 'fromnewmsgid': dataitem.find('.//fromnewmsgid').text if dataitem.find('.//fromnewmsgid') is not None else '',
+                # 'datasize': dataitem.find('.//datasize').text if dataitem.find('.//datasize') is not None else '',
+                # 'thumbfullmd5': dataitem.find('.//thumbfullmd5').text if dataitem.find('.//thumbfullmd5') is not None else '',
+                'datafmt': dataitem.find('.//datafmt').text if dataitem.find(
+                    './/datafmt') is not None else '',
+                # 'cdnthumbkey': dataitem.find('.//cdnthumbkey').text if dataitem.find('.//cdnthumbkey') is not None else '',
+                'sourcename': dataitem.find('.//sourcename').text if dataitem.find(
+                    './/sourcename') is not None else '',
+                'sourceheadurl': dataitem.find('.//sourceheadurl').text if dataitem.find(
+                    './/sourceheadurl') is not None else '',
+                'datadesc': dataitem.find('.//datadesc').text if dataitem.find(
+                    './/datadesc') is not None else '',
+                'children': [],
+            }
+
+            prefix = f"{data['sourcename']}: "
+            count = 8 * level
+            if data['datatype'] == '1':
+                data['placeholder'] = data['datadesc']
+            elif data['datatype'] == '2':
+                data['placeholder'] = '[Photo]'
+            elif data['datatype'] == '4':
+                data['placeholder'] = '[Video]'
+            elif data['datatype'] == '5':
+                data['placeholder'] = f"[Link] {data['datatitle']}"
+            elif data['datatype'] == '8':
+                data['placeholder'] = f"[File] {data['datatitle']}"
+            elif data['datatype'] == '17':
+                data['placeholder'] = f"\n{' ' * count}[Chat History]"
+                for i in parse_chat_history(dataitem.find('recordxml/recordinfo'), level + 1):
+                    data['placeholder'] += f"\n{' ' * count}{i['formatted']}"
+                    data['children'] = i
+                data['placeholder'] += f"\n{' ' * count}[Chat History]"
+            elif data['datatype'] == '19':
+                data['placeholder'] = f"[Mini Program] {data['datatitle']}"
+            else:
+                data['placeholder'] = data['datadesc'] or data['datatitle']
+
+            data['formatted'] = f"{prefix} {data['placeholder']}"
+
+            res.append(data)
+    return res
 
 def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union[Chat, ChatMember]], None] = None) -> Message:
     """
@@ -301,7 +362,17 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 msg_title = xml.xpath('/msg/appmsg/title/text()')[0]
             except:
                 msg_title = ""
-            forward_content = xml.xpath('/msg/appmsg/des/text()')[0]
+            try:
+                recorditem_element = xml.find('.//recorditem')
+                inner_xml_string = recorditem_element.text
+                recordinfo_root = etree.fromstring(inner_xml_string.encode('utf-8'))
+                texts = []
+                for data in parse_chat_history(recordinfo_root):
+                    texts.append(data['formatted'])
+                forward_content = "\n".join(texts)
+            except Exception as e:
+                forward_content = xml.xpath('/msg/appmsg/des/text()')[0]
+
             result_text += f"{msg_title}\n\n{forward_content}"
             efb_msg = Message(
                 type=MsgType.Text,
@@ -394,7 +465,8 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
             refer_msgType = int(xml.xpath('/msg/appmsg/refermsg/type/text()')[0]) # 被引用消息类型
             e = xml.xpath('/msg/appmsg/refermsg/svrid/text()') # 被引用消息 id
             refer_svrid = len(e) > 0 and e[0] or None
-            # refer_fromusr = xml.xpath('/msg/appmsg/refermsg/fromusr/text()')[0] # 被引用消息所在房间
+            e = xml.xpath('/msg/appmsg/refermsg/fromusr/text()') # 被引用消息所在房间
+            refer_fromusr = len(e) > 0 and e[0] or None
             e = xml.xpath('/msg/appmsg/refermsg/chatusr/text()') # 被引用消息发送人微信号
             refer_chatusr = len(e) > 0 and e[0] or None
             e = xml.xpath('/msg/appmsg/refermsg/displayname/text()') # 被引用消息发送人微信名称
@@ -405,9 +477,26 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 vendor_specific={ "is_refer": True }
             )
             prefix = ""
+            if "@chatroom" in refer_fromusr:
+                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
+                    uid = refer_fromusr,
+                ))
+            else:
+                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                    uid = refer_chatusr,
+                ))
+            sent_by_master = True
+            if refer_svrid is not None:
+                try:
+                    # 从 master channel 中根据微信 id 查找，如果找到说明是由 comwechat self_msg 发送过去的
+                    master_message = coordinator.master.get_message_by_id(chat=chat, msg_id=refer_svrid)
+                    if master_message is not None:
+                        sent_by_master = False
+                except:
+                    pass
             if refer_displayname is not None:
                 prefix = f"{refer_displayname}:"
-            if refer_svrid is None or refer_chatusr == message["self"]:
+            if refer_svrid is None or (refer_chatusr == message["self"] and sent_by_master):
                 if refer_msgType == 1: # 被引用的消息是文本
                     refer_content = xml.xpath('/msg/appmsg/refermsg/content/text()')[0] # 被引用消息内容
                     result_text = qutoed_text(refer_content, msg, prefix)
@@ -419,6 +508,8 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                         if type == 57:
                             refer_msg_text = refer_msg_xml.xpath('/msg/appmsg/title/text()')[0]
                             result_text = qutoed_text(refer_msg_text, msg, prefix)
+                        else:
+                            result_text = msg
                     except Exception as e:
                         print_exc()
                 else: # 被引用的消息非文本，提示不支持

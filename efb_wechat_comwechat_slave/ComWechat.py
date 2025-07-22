@@ -6,10 +6,12 @@ from pydub import AudioSegment
 import os
 import base64
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import re
 import json
 from ehforwarderbot.chat import SystemChat, PrivateChat , SystemChatMember, ChatMember, SelfChatMember
+import hashlib
 from typing import Tuple, Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
@@ -22,23 +24,21 @@ from . import __version__ as version
 from ehforwarderbot.channel import SlaveChannel
 from ehforwarderbot.types import MessageID, ChatID, InstanceID
 from ehforwarderbot import utils as efb_utils
-from ehforwarderbot.exceptions import EFBException
+from ehforwarderbot.exceptions import EFBException, EFBChatNotFound
 from ehforwarderbot.message import MessageCommand, MessageCommands
 from ehforwarderbot.status import MessageRemoval
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
 from .MsgDeco import qutoed_text
-from .MsgProcess import MsgProcess
+from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
+from .Constant import QUOTE_MESSAGE, QUOTE_GROUP_MESSAGE
 
 from rich.console import Console
 from rich import print as rprint
 from io import BytesIO
 from PIL import Image
-
-QUOTE_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr /></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
-QUOTE_GROUP_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr>%s</chatusr></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
@@ -58,6 +58,7 @@ class ComWeChatChannel(SlaveChannel):
     cache =  TTLCache(maxsize=200, ttl= time_out)  # 缓存发送过的消息ID
     file_msg : Dict = {}                           # 存储待修改的文件类消息 {path : msg}
     delete_file : Dict = {}                        # 存储待删除的消息 {path : time}
+    forward_pattern = r"ehforwarderbot:\/\/([^/]+)\/forward\/(\d+)"
 
     __version__ = version.__version__
     logger: logging.Logger = logging.getLogger("comwechat")
@@ -376,7 +377,8 @@ class ComWeChatChannel(SlaveChannel):
         )
         msg.edit_media = True
         if self.is_login():
-            self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+            self.me = self.bot.GetSelfInfo()["data"]
+            self.wxid = self.me["wxId"]
             self.GetContactListBySql()
             self.GetGroupListBySql()
             msg.text = "登录成功"
@@ -437,6 +439,8 @@ class ComWeChatChannel(SlaveChannel):
             msg.commands = MessageCommands(content["commands"])
         if "message" in content:
             msg.text = content['message']
+        if "target" in content:
+            msg.target = content['target']
 
         self.send_efb_msgs(msg, uid=int(time.time()), chat=chat, author=author, type=MsgType.Text)
 
@@ -477,7 +481,7 @@ class ComWeChatChannel(SlaveChannel):
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
-        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
+        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def handle_file_msg(self):
         while True:
@@ -509,7 +513,7 @@ class ComWeChatChannel(SlaveChannel):
 
                     if flag:
                         del self.file_msg[path]
-                        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
+                        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
@@ -576,7 +580,7 @@ class ComWeChatChannel(SlaveChannel):
             for friend in self.friends:
                 if friend.uid == chat_uid:
                     return friend
-        return self.user_auth_chat
+        raise EFBChatNotFound
 
     #发送消息
     def send_message(self, msg : Message) -> Message:
@@ -599,6 +603,17 @@ class ComWeChatChannel(SlaveChannel):
                 self.system_msg(content)
                 return msg
 
+        if msg.text:
+            match = re.search(self.forward_pattern, msg.text)
+            if match:
+                if match.group(1) == hashlib.md5(self.channel_id.encode('utf-8')).hexdigest():
+                    msgid = match.group(2)
+                    self.logger.debug(f"提取到的消息 ID: {msgid}")
+                    self.bot.ForwardMessage(wxid = chat_uid, msgid = msgid)
+                else:
+                    self.logger.debug(f"非本 slave 消息: {match.group(1)}/{match.group(2)}")
+                return msg
+
         if msg.type == MsgType.Voice:
             f = tempfile.NamedTemporaryFile(prefix='voice_message_', suffix=".mp3")
             AudioSegment.from_ogg(msg.file.name).export(f, format="mp3")
@@ -619,7 +634,7 @@ class ComWeChatChannel(SlaveChannel):
                         name = self.contacts[wxid]
                     except:
                         try:
-                            name = self.bot.GetChatroomMemberNickname(chatroom_id = chat_uid, wxid = wxid)
+                            name = self.bot.GetChatroomMemberNickname(chatroom_id = chat_uid, wxid = wxid)['nickname'] or wxid
                         except:
                             name = wxid
                     message += '\n' + wxid + ' : ' + name
@@ -664,9 +679,32 @@ class ComWeChatChannel(SlaveChannel):
             elif msg.text.startswith('/addtogroup'):
                 users = msg.text[12::]
                 res = self.bot.AddChatroomMember(chatroom_id = chat_uid, wxids = users)
+            elif msg.text.startswith('/forward'):
+                if isinstance(msg.target, Message):
+                    msgid = msg.target.uid
+                    if msgid.isdecimal():
+                        url = f"ehforwarderbot://{hashlib.md5(self.channel_id.encode('utf-8')).hexdigest()}/forward/{msgid}"
+                        prompt = "请将这条信息转发到目标聊天中"
+                        text = f"{url}\n{prompt}"
+                        if msg.target.text:
+                            match = re.search(self.forward_pattern, msg.target.text)
+                            if match:
+                                msg.target.text = f"{msg.target.text[0:match.start()]}{text}"
+                            else:
+                                msg.target.text = f"{msg.target.text}\n\n---\n{text}"
+                        else:
+                            msg.target.text = text
+                        self.send_efb_msgs(msg.target, edit=True)
+                    else:
+                        text = f"无法转发{msgid},不是有效的微信消息"
+                        self.system_msg({'sender': chat_uid, 'message': text, 'target': msg.target})
+                    return msg
             elif msg.text.startswith('/at'):
                 users_message = msg.text[4::].split(' ', 1)
-                if len(users_message) == 2:
+                if isinstance(msg.target, Message):
+                    users = msg.target.author.uid
+                    message = msg.text[4::]
+                elif len(users_message) == 2:
                     users, message = users_message
                 else:
                     users, message = users_message[0], ''
@@ -745,16 +783,22 @@ class ComWeChatChannel(SlaveChannel):
     def send_text(self, wxid: ChatID, msg: Message) -> 'Message':
         text = msg.text
         if isinstance(msg.target, Message):
-                if isinstance(msg.target.author, SelfChatMember):
+                if isinstance(msg.target.author, SelfChatMember) and isinstance(msg.target.deliver_to, SlaveChannel):
                     qt_txt = msg.target.text or msg.target.type.name
                     text = qutoed_text(qt_txt, msg.text)
                 else:
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
-                    if "@chatroom" in msg.author.chat.uid:
-                        xml = QUOTE_GROUP_MESSAGE % (text, msgid, sender, msg.author.chat.uid, self.wxid)
+                    displayname = msg.target.author.name
+                    content = escape(msg.target.vendor_specific.get("wx_xml", ""))
+                    if content:
+                        content = "<content>%s</content>" % content
                     else:
-                        xml = QUOTE_MESSAGE % (text, msgid, sender, self.wxid)
+                        content = "<content />"
+                    if "@chatroom" in msg.author.chat.uid:
+                        xml = QUOTE_GROUP_MESSAGE % (self.wxid, text, msgid, sender, sender, displayname, content)
+                    else:
+                        xml = QUOTE_MESSAGE % (self.wxid, text, msgid, sender, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 
