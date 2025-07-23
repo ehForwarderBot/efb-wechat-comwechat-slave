@@ -90,7 +90,7 @@ def MsgProcess(msg : dict , chat) -> Union[Message, List[Message]]:
             return efb_text_simple_wrapper(f"[{content}]")
 
     elif msg["type"] == "other":
-        return efb_other_wrapper(msg["message"])
+        return efb_other_wrapper(msg["message"], chat)
 
     elif msg["type"] == "phone":
         return
