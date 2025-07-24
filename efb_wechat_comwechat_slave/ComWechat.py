@@ -355,14 +355,11 @@ class ComWeChatChannel(SlaveChannel):
     def login_prompt(self):
         file = self.get_qrcode()
         chat = self.user_auth_chat
-        try:
-            author = chat.get_member(SystemChatMember.SYSTEM_ID)
-        except KeyError:
-            author = chat.add_system_member()
+        author = self.user_auth_chat.other
         msg = Message(
             type=MsgType.Text,
+            uid=MessageID(str(int(time.time()))),
         )
-        msg.uid=int(time.time())
 
         if not file:
             is_login = self.is_login()
@@ -375,7 +372,6 @@ class ComWeChatChannel(SlaveChannel):
                 MessageCommand(
                     name=("Confirm"),
                     callable_name="confirm_login",
-                    args=[msg.uid],
                 ),
             ])
             msg.type = MsgType.Image
@@ -384,17 +380,12 @@ class ComWeChatChannel(SlaveChannel):
             msg.mime = 'image/png'
         self.send_efb_msgs(msg, chat=chat, author=author)
 
-    def confirm_login(self, previous_message_id):
+    def confirm_login(self):
         chat = self.user_auth_chat
-        try:
-            author = chat.get_member(SystemChatMember.SYSTEM_ID)
-        except KeyError:
-            author = chat.add_system_member()
+        author = self.user_auth_chat.other
         msg = Message(
             type=MsgType.Text,
-            uid=previous_message_id,
-            edit=True,
-            edit_media = True
+            uid=MessageID(str(int(time.time()))),
         )
         if self.is_login():
             self.get_me()
@@ -402,7 +393,7 @@ class ComWeChatChannel(SlaveChannel):
             self.GetGroupListBySql()
             msg.text = "登录成功"
         else:
-            msg.text = "登录失败，请使用 /extra 重新尝试登录"
+            msg.text = "登录失败，请使用重新登录"
         self.send_efb_msgs(msg, chat=chat, author=author)
 
     @efb_utils.extra(name="Get QR Code",
