@@ -538,7 +538,8 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 text=result_text,
                 vendor_specific={ "is_mp": True }
             )
-        # elif type == 87: # 群公告
+        elif type == 87: # 群公告
+            return
         #     title = xml.xpath('/msg/appmsg/textannouncement/text()')[0]
         #     efb_msg = Message(
         #         type=MsgType.Text,
