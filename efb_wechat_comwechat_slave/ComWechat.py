@@ -35,7 +35,7 @@ from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystem
 from .MsgDeco import qutoed_text
 from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
-from .Constant import QUOTE_MESSAGE, QUOTE_GROUP_MESSAGE
+from .Constant import QUOTE_MESSAGE
 
 from rich.console import Console
 from rich import print as rprint
@@ -501,7 +501,7 @@ class ComWeChatChannel(SlaveChannel):
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
-        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+        self.send_efb_msgs(MsgWrapper(msg, MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def handle_file_msg(self):
         while True:
@@ -533,7 +533,7 @@ class ComWeChatChannel(SlaveChannel):
 
                     if flag:
                         del self.file_msg[path]
-                        self.send_efb_msgs(MsgWrapper(msg["message"], MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+                        self.send_efb_msgs(MsgWrapper(msg, MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
@@ -795,15 +795,35 @@ class ComWeChatChannel(SlaveChannel):
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
                     displayname = msg.target.author.name
-                    content = escape(msg.target.vendor_specific.get("wx_xml", ""))
+                    content = escape(msg.target.vendor_specific.get("wx_xml", ""), {
+                        "\n": "&#x0A;",
+                        "\t": "&#x09;",
+                        '"': "&quot;",
+                    }) or msg.target.text
+                    comwechat_info = msg.target.vendor_specific.get("comwechat_info", {})
+                    if comwechat_info.get("type", None) == "animatedsticker":
+                        refer_type = 47
+                    elif msg.target.type == MsgType.Image:
+                        refer_type = 3
+                    elif msg.target.type == MsgType.Voice:
+                        refer_type = 34
+                    elif msg.target.type == MsgType.Video:
+                        refer_type = 43
+                    elif msg.target.type == MsgType.Sticker:
+                        refer_type = 47
+                    elif msg.target.type == MsgType.Location:
+                        refer_type = 48
+                    elif msg.target.type == MsgType.File:
+                        refer_type = 49
+                    elif comwechat_info.get("type", None) == "share":
+                        refer_type = 49
+                    else:
+                        refer_type = 1
                     if content:
                         content = "<content>%s</content>" % content
                     else:
                         content = "<content />"
-                    if "@chatroom" in msg.author.chat.uid:
-                        xml = QUOTE_GROUP_MESSAGE % (self.wxid, text, msgid, sender, sender, displayname, content)
-                    else:
-                        xml = QUOTE_MESSAGE % (self.wxid, text, msgid, sender, sender, displayname, content)
+                    xml = QUOTE_MESSAGE % (self.wxid, text_to_send, refer_type, msgid, sender, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 
