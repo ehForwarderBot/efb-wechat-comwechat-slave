@@ -823,7 +823,7 @@ class ComWeChatChannel(SlaveChannel):
                         content = "<content>%s</content>" % content
                     else:
                         content = "<content />"
-                    xml = QUOTE_MESSAGE % (self.wxid, text_to_send, refer_type, msgid, sender, sender, displayname, content)
+                    xml = QUOTE_MESSAGE % (self.wxid, text, refer_type, msgid, sender, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 
