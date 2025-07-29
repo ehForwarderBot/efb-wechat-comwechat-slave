@@ -1,12 +1,14 @@
 import logging, tempfile
 import time
 import threading
+from lxml import etree
 from traceback import print_exc
 from pydub import AudioSegment
 import qrcode
 from pyzbar.pyzbar import decode as pyzbar_decode
 import os
 import base64
+import pickle
 from pathlib import Path
 
 import re
@@ -88,6 +90,7 @@ class ComWeChatChannel(SlaveChannel):
         self.login()
         self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
+        self.load()
         self.dir = self.config["dir"]
         if not self.dir.endswith(os.path.sep):
             self.dir += os.path.sep
@@ -106,6 +109,7 @@ class ComWeChatChannel(SlaveChannel):
                     name = name,
                 ))
                 author = chat.self
+                self.extract_alias(msg)
             else:
                 chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid = sender,
@@ -155,6 +159,7 @@ class ComWeChatChannel(SlaveChannel):
                 name = self.contacts[wxid]
             except:
                 name = wxid
+            self.extract_alias(msg)
 
             author = ChatMgr.build_efb_chat_as_member(chat, EFBGroupMember(
                 uid = wxid,
@@ -177,6 +182,13 @@ class ComWeChatChannel(SlaveChannel):
                     uid = sender,
                     name = name,
                 ))
+                xml = etree.fromstring(msg["message"])
+                text = xml.xpath('string(/sysmsg/revokemsg/replacemsg)')
+                alias = re.search(r'^"(.*?)" (撤回了一条消息|recalled a message)$', text)
+                if alias and alias.group(1) != self.get_name_by_wxid(wxid):
+                    self.merge_group_members(sender, {
+                        wxid: alias.group(1)
+                    })
             else:
                 chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid = sender,
@@ -877,8 +889,64 @@ class ComWeChatChannel(SlaveChannel):
                 )
                 self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
 
+    def dump(self):
+        data = {
+            "group_memebers": self.group_members
+        }
+        file = f"{efb_utils.get_data_path(self.channel_id)}/comwechat.efb.pkl"
+        with open(file,"wb") as f:
+            pickle.dump(data, f)
+
+    def load(self):
+        file = f"{efb_utils.get_data_path(self.channel_id)}/comwechat.efb.pkl"
+        if os.path.exists(file):
+            with open(file, 'rb') as fp:
+                data = pickle.load(fp)
+                self.group_members = data.get("group_memebers", {})
+
+    def merge_group_members(self, group, new_members):
+        is_updated = False
+        self.group_members[group] = self.group_members.get(group, {})
+        for wxid, alias in new_members.items():
+            if self.group_members[group].get(wxid, None) != alias:
+                self.group_members[group][wxid] = alias
+                is_updated = True
+        if is_updated:
+            self.dump()
+
     def GetGroupListBySql(self):
-        self.group_members = self.bot.GetAllGroupMembersBySql()
+        groups = self.bot.GetAllGroupMembersBySql()
+        for group, members in groups.items():
+            self.merge_group_members(group, members)
+
+    def extract_alias(self, msg):
+        sender = msg["sender"]
+        extracted = False
+        if "<refermsg>" in msg["message"]:
+            xml = etree.fromstring(msg["message"])
+            id = xml.xpath('string(/msg/appmsg/refermsg/chatusr)')
+            alias = xml.xpath('string(/msg/appmsg/refermsg/displayname)')
+            name = self.get_name_by_wxid(id)
+            if alias and alias != name:
+                extracted = True
+                self.merge_group_members(sender, {
+                    id: alias
+                })
+
+        if not extracted and "<atuserlist>" in msg["extrainfo"]:
+            xml = etree.fromstring(msg["extrainfo"])
+            at_user = xml.xpath('string(/msgsource/atuserlist)')
+            user_list = [user for user in at_user.split(",") if user]
+            if len(user_list) == 1:
+                try:
+                    name = self.get_name_by_wxid(user_list[0])
+                    alias = re.search("^@(.*)\u2005", msg["message"]).group(1)
+                    if alias != name:
+                        self.merge_group_members(sender, {
+                            user_list[0]: alias
+                        })
+                except:
+                    print_exc()
     #定时更新 End
 
 
