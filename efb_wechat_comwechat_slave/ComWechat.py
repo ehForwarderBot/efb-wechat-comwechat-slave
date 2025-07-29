@@ -9,6 +9,7 @@ from pyzbar.pyzbar import decode as pyzbar_decode
 import os
 import base64
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import re
 import json
@@ -26,25 +27,23 @@ from . import __version__ as version
 from ehforwarderbot.channel import SlaveChannel
 from ehforwarderbot.types import MessageID, ChatID, InstanceID
 from ehforwarderbot import utils as efb_utils
-from ehforwarderbot.exceptions import EFBException
+from ehforwarderbot.exceptions import EFBException, EFBChatNotFound
 from ehforwarderbot.message import MessageCommand, MessageCommands
 from ehforwarderbot.status import MessageRemoval
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
 from .MsgDeco import qutoed_text
-from .MsgProcess import MsgProcess
+from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
 from .db import DatabaseManager
+from .Constant import QUOTE_MESSAGE
 
 from rich.console import Console
 from rich import print as rprint
 from io import BytesIO
 from PIL import Image
 from pyqrcode import QRCode
-
-QUOTE_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr /></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
-QUOTE_GROUP_MESSAGE = '<?xml version="1.0"?><msg><appmsg appid="" sdkver="0"><title>%s</title><des /><action /><type>57</type><showtype>0</showtype><soundtype>0</soundtype><mediatagname /><messageext /><messageaction /><content /><contentattr>0</contentattr><url /><lowurl /><dataurl /><lowdataurl /><songalbumurl /><songlyric /><appattach><totallen>0</totallen><attachid /><emoticonmd5 /><fileext /><aeskey /></appattach><extinfo /><sourceusername /><sourcedisplayname /><thumburl /><md5 /><statextstr /><refermsg><type>1</type><svrid>%s</svrid><fromusr>%s</fromusr><chatusr>%s</chatusr></refermsg></appmsg><fromusername>%s</fromusername><scene>0</scene><appinfo><version>1</version><appname></appname></appinfo><commenturl></commenturl></msg>'
 
 class ComWeChatChannel(SlaveChannel):
     channel_name : str = "ComWechatChannel"
@@ -89,7 +88,8 @@ class ComWeChatChannel(SlaveChannel):
 
         self.qrcode_timeout = self.config.get("qrcode_timeout", 10)
         self.login()
-        self.wxid = self.bot.GetSelfInfo()["data"]["wxId"]
+        self.me = self.bot.GetSelfInfo()["data"]
+        self.wxid = self.me["wxId"]
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
         self.load()
         self.dir = self.config["dir"]
@@ -514,7 +514,7 @@ class ComWeChatChannel(SlaveChannel):
             self.file_msg[msg["filepath"]] = ( msg , author , chat )
             return
 
-        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+        self.send_efb_msgs(MsgWrapper(msg, MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def handle_file_msg(self):
         while True:
@@ -546,7 +546,7 @@ class ComWeChatChannel(SlaveChannel):
 
                     if flag:
                         del self.file_msg[path]
-                        self.send_efb_msgs(MsgProcess(msg, chat), author=author, chat=chat, uid=msg['msgid'])
+                        self.send_efb_msgs(MsgWrapper(msg, MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
@@ -612,6 +612,7 @@ class ComWeChatChannel(SlaveChannel):
             for friend in self.friends:
                 if friend.uid == chat_uid:
                     return friend
+        raise EFBChatNotFound
 
     #发送消息
     def send_message(self, msg : Message) -> Message:
@@ -806,10 +807,36 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
-                    if "@chatroom" in msg.author.chat.uid:
-                        xml = QUOTE_GROUP_MESSAGE % (text, msgid, sender, msg.author.chat.uid, self.wxid)
+                    displayname = msg.target.author.name
+                    content = escape(msg.target.vendor_specific.get("wx_xml", ""), {
+                        "\n": "&#x0A;",
+                        "\t": "&#x09;",
+                        '"': "&quot;",
+                    }) or msg.target.text
+                    comwechat_info = msg.target.vendor_specific.get("comwechat_info", {})
+                    if comwechat_info.get("type", None) == "animatedsticker":
+                        refer_type = 47
+                    elif msg.target.type == MsgType.Image:
+                        refer_type = 3
+                    elif msg.target.type == MsgType.Voice:
+                        refer_type = 34
+                    elif msg.target.type == MsgType.Video:
+                        refer_type = 43
+                    elif msg.target.type == MsgType.Sticker:
+                        refer_type = 47
+                    elif msg.target.type == MsgType.Location:
+                        refer_type = 48
+                    elif msg.target.type == MsgType.File:
+                        refer_type = 49
+                    elif comwechat_info.get("type", None) == "share":
+                        refer_type = 49
                     else:
-                        xml = QUOTE_MESSAGE % (text, msgid, sender, self.wxid)
+                        refer_type = 1
+                    if content:
+                        content = "<content>%s</content>" % content
+                    else:
+                        content = "<content />"
+                    xml = QUOTE_MESSAGE % (self.wxid, text_to_send, refer_type, msgid, sender, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 
