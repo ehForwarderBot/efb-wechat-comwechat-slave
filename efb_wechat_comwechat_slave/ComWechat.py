@@ -8,7 +8,6 @@ import qrcode
 from pyzbar.pyzbar import decode as pyzbar_decode
 import os
 import base64
-import pickle
 from pathlib import Path
 
 import re
@@ -36,6 +35,7 @@ from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystem
 from .MsgDeco import qutoed_text
 from .MsgProcess import MsgProcess
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
+from .db import DatabaseManager
 
 from rich.console import Console
 from rich import print as rprint
@@ -78,6 +78,7 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("ComWeChat Slave Channel initialized.")
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
+        self.db: DatabaseManager = DatabaseManager(self)
         self.bot = WeChatRobot()
 
         self.qr_url = ""
@@ -840,7 +841,7 @@ class ComWeChatChannel(SlaveChannel):
         t.start()
 
     def send_status(self, status: 'Status'):
-        ...
+        self.db.stop_worker()
 
     def stop_polling(self):
         ...
@@ -889,30 +890,18 @@ class ComWeChatChannel(SlaveChannel):
                 )
                 self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
 
-    def dump(self):
-        data = {
-            "group_memebers": self.group_members
-        }
-        file = f"{efb_utils.get_data_path(self.channel_id)}/comwechat.efb.pkl"
-        with open(file,"wb") as f:
-            pickle.dump(data, f)
-
     def load(self):
-        file = f"{efb_utils.get_data_path(self.channel_id)}/comwechat.efb.pkl"
-        if os.path.exists(file):
-            with open(file, 'rb') as fp:
-                data = pickle.load(fp)
-                self.group_members = data.get("group_memebers", {})
+        rows = self.db.get_all_group_aliases()
+        for r in rows:
+            self.group_members[r.group_uid] = self.group_members.get(r.group_uid, {})
+            self.group_members[r.group_uid][r.wxid] = r.group_alias
 
     def merge_group_members(self, group, new_members):
-        is_updated = False
         self.group_members[group] = self.group_members.get(group, {})
         for wxid, alias in new_members.items():
             if self.group_members[group].get(wxid, None) != alias:
                 self.group_members[group][wxid] = alias
-                is_updated = True
-        if is_updated:
-            self.dump()
+                self.db.update_group_alias(group, wxid, alias)
 
     def GetGroupListBySql(self):
         groups = self.bot.GetAllGroupMembersBySql()
