@@ -57,6 +57,7 @@ class ComWeChatChannel(SlaveChannel):
     groups : EFBGroupChat    = []
 
     contacts : Dict = {}            # {wxid : {alias : str , remark : str, nickname : str , type : int}} -> {wxid : name(after handle)}
+    nicknames : Dict = {}
     group_members : Dict = {}       # {"group_id" : { "wxID" : "displayName"}}
 
     time_out : int = 120
@@ -161,11 +162,14 @@ class ComWeChatChannel(SlaveChannel):
             except:
                 name = wxid
             self.extract_alias(msg)
+            alias = self.group_members.get(sender,{}).get(wxid , None)
+            if alias == self.nicknames.get(wxid, None):
+                alias = None
 
             author = ChatMgr.build_efb_chat_as_member(chat, EFBGroupMember(
                 uid = wxid,
                 name = name,
-                alias = self.group_members.get(sender,{}).get(wxid , None),
+                alias = alias
             ))
             self.handle_msg(msg, author, chat)
 
@@ -186,7 +190,7 @@ class ComWeChatChannel(SlaveChannel):
                 xml = etree.fromstring(msg["message"])
                 text = xml.xpath('string(/sysmsg/revokemsg/replacemsg)')
                 alias = re.search(r'^"(.*?)" (撤回了一条消息|recalled a message)$', text)
-                if alias and alias.group(1) != self.get_name_by_wxid(wxid):
+                if alias and alias.group(1) != self.get_nickname_by_wxid(wxid):
                     self.merge_group_members(sender, {
                         wxid: alias.group(1)
                     })
@@ -887,9 +891,28 @@ class ComWeChatChannel(SlaveChannel):
                 name = data[3]
                 if name == "":
                     name = wxid
+                else:
+                    self.contacts[wxid] = name
             else:
                 name = wxid
         return name
+
+    def get_nickname_by_wxid(self, wxid):
+        try:
+            nickname = self.nicknames[wxid]
+            if nickname == "":
+                nickname = wxid
+        except:
+            data = self.bot.GetContactBySql(wxid = wxid)
+            if data:
+                nickname = data[2]
+                if nickname == "":
+                    nickname = wxid
+                else:
+                    self.nicknames[wxid] = nickname
+            else:
+                nickname = wxid
+        return nickname
 
     #定时更新 Start
     def GetContactListBySql(self):
@@ -901,6 +924,7 @@ class ComWeChatChannel(SlaveChannel):
             name = (f"{data['remark']}({data['nickname']})") if data["remark"] else data["nickname"]
 
             self.contacts[contact] = name
+            self.nicknames[contact] = data["nickname"]
             if data["type"] == 0 or data["type"] == 4:
                 continue
 
@@ -942,7 +966,7 @@ class ComWeChatChannel(SlaveChannel):
             xml = etree.fromstring(msg["message"])
             id = xml.xpath('string(/msg/appmsg/refermsg/chatusr)')
             alias = xml.xpath('string(/msg/appmsg/refermsg/displayname)')
-            name = self.get_name_by_wxid(id)
+            name = self.get_nickname_by_wxid(id)
             if alias and alias != name:
                 extracted = True
                 self.merge_group_members(sender, {
@@ -955,7 +979,7 @@ class ComWeChatChannel(SlaveChannel):
             user_list = [user for user in at_user.split(",") if user]
             if len(user_list) == 1:
                 try:
-                    name = self.get_name_by_wxid(user_list[0])
+                    name = self.get_nickname_by_wxid(user_list[0])
                     alias = re.search("^@(.*)\u2005", msg["message"]).group(1)
                     if alias != name:
                         self.merge_group_members(sender, {
