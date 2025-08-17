@@ -26,7 +26,7 @@ from . import __version__ as version
 from ehforwarderbot.channel import SlaveChannel
 from ehforwarderbot.types import MessageID, ChatID, InstanceID
 from ehforwarderbot import utils as efb_utils
-from ehforwarderbot.exceptions import EFBException, EFBChatNotFound
+from ehforwarderbot.exceptions import EFBException, EFBChatNotFound, EFBMessageError
 from ehforwarderbot.message import MessageCommand, MessageCommands
 from ehforwarderbot.status import MessageRemoval
 
@@ -780,7 +780,7 @@ class ComWeChatChannel(SlaveChannel):
 
         try:
             if str(res["msg"]) == "0":
-                self.system_msg({'sender':chat_uid, 'message':"发送失败，请在手机端确认"})
+                raise EFBMessageError("发送失败，请在手机端确认")
         except:
             ...
         return msg
