@@ -58,11 +58,15 @@ class ChatMgr:
         :return: Newly built ChatMember
         """
         with contextlib.suppress(KeyError):
-            return chat.get_member(str(member.get('uid', '')))
-        efb_chat: ChatMember = chat.add_member(
+            m = chat.get_member(str(member.get('uid', '')))
+        m: ChatMember = chat.add_member(
             **member
         )
-        return efb_chat
+        if member.get('name', None) is not None:
+            m.name = member.get('name')
+        if member.get('alias', None) is not None:
+            m.alias = member.get('alias')
+        return m
 
     @staticmethod
     def build_efb_chat_as_system_user(chat: EFBSystemUser):
