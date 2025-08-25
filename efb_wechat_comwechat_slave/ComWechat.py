@@ -308,7 +308,7 @@ class ComWeChatChannel(SlaveChannel):
                 if sender == wxid:
                     author = chat.self
                 else:
-                    alias = self.get_nickname_by_wxid(wxid)
+                    alias = self.group_members.get(sender,{}).get(wxid , None),
                     alias = None if alias == name else alias
                     author = ChatMgr.build_efb_chat_as_member(chat, EFBGroupMember(
                         uid = wxid,
