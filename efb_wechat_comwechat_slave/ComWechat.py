@@ -300,13 +300,38 @@ class ComWeChatChannel(SlaveChannel):
                 )
             ]
 
-            content["sender"] = sender
-            content["message"] = text
-            content["name"] = name
+            if "@chatroom" in sender:
+                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
+                    uid = sender,
+                    name = self.get_name_by_wxid(sender)
+                ))
+                if sender == wxid:
+                    author = chat.self
+                else:
+                    alias = self.group_members.get(sender,{}).get(wxid , None),
+                    alias = None if alias == name else alias
+                    author = ChatMgr.build_efb_chat_as_member(chat, EFBGroupMember(
+                        uid = wxid,
+                        name = name,
+                        alias = alias
+                    ))
+            else:
+                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                    uid = sender,
+                    name = name,
+                ))
+                author = chat.self if sender == self.wxid else chat.other
+                if sender.startswith('gh_'):
+                    chat.vendor_specific = {'is_mp' : True}
+
             # if "v3" in username:
             #     content["commands"] = commands
             # 暂时屏蔽
-            self.system_msg(content)
+            m = Message(
+                type=MsgType.Text,
+                text=text
+            )
+            self.send_efb_msgs(MsgWrapper(msg, m), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def login(self):
         self.master_qr_picture_id = None
