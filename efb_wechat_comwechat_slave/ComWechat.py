@@ -28,7 +28,7 @@ from ehforwarderbot.types import MessageID, ChatID, InstanceID
 from ehforwarderbot import utils as efb_utils
 from ehforwarderbot.exceptions import EFBException, EFBChatNotFound, EFBMessageError
 from ehforwarderbot.message import MessageCommand, MessageCommands
-from ehforwarderbot.status import MessageRemoval
+from ehforwarderbot.status import MessageRemoval, ChatUpdates
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
@@ -905,8 +905,8 @@ class ComWeChatChannel(SlaveChannel):
 
     #定时更新 Start
     def GetContactListBySql(self):
-        self.groups = []
-        self.friends = []
+        new_chats = []
+        modified_chats = []
         contacts = self.bot.GetContactListBySql()
         for contact in contacts:
             data = contacts[contact]
@@ -921,13 +921,26 @@ class ComWeChatChannel(SlaveChannel):
                     uid=contact,
                     name=name
                 )
-                self.groups.append(ChatMgr.build_efb_chat_as_group(new_entity))
+                try:
+                    self.get_chat(contact)
+                    modified_chats.append(contact)
+                except EFBChatNotFound:
+                    self.groups.append(ChatMgr.build_efb_chat_as_group(new_entity))
+                    new_chats.append(contact)
             else:
                 new_entity = EFBPrivateChat(
                     uid=contact,
                     name=name
                 )
-                self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
+                try:
+                    self.get_chat(contact)
+                    modified_chats.append(contact)
+                except EFBChatNotFound:
+                    self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
+                    new_chats.append(contact)
+
+        if new_chats or modified_chats:
+            coordinator.send_status(ChatUpdates(channel=self, new_chats=new_chats, modified_chats=modified_chats))
 
     def GetGroupListBySql(self):
         self.group_members = self.bot.GetAllGroupMembersBySql()
