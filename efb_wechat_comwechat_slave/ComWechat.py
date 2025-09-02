@@ -930,7 +930,7 @@ class ComWeChatChannel(SlaveChannel):
         except:
             data = self.bot.GetContactBySql(wxid = wxid)
             if data:
-                nickname = data[2]
+                nickname = data[3]
                 if nickname == "":
                     nickname = wxid
                 else:
