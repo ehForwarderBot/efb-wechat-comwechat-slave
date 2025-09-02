@@ -223,7 +223,7 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
     //appmsg/type = 19 : 合并转发的聊天记录
     //appmsg/type = 21 : 微信运动
     //appmsg/type = 24 : 从收藏中分享的笔记
-    //appmsg/type = 33 : 美团外卖
+    //appmsg/type = 33 : 美团外卖/腾讯微证券
     //appmsg/type = 35 : 消息同步
     //appmsg/type = 36 : 京东农场，滴滴打车
     //appmsg/type = 51 : 视频（微信视频号分享）
@@ -408,10 +408,11 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
             )
         elif type == 33:
             sourcedisplayname = xml.xpath('/msg/appmsg/sourcedisplayname/text()')[0]
+            title = xml.xpath('string(/msg/appmsg/title)')
             weappiconurl = xml.xpath('/msg/appmsg/weappinfo/weappiconurl/text()')[0]
             url = xml.xpath('/msg/appmsg/url/text()')[0]
             attribute = LinkAttribute(
-                title=sourcedisplayname,
+                title=f"{sourcedisplayname}\n{title}",
                 description=None,
                 url=url,
                 image=weappiconurl
@@ -477,14 +478,6 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 vendor_specific={ "is_refer": True }
             )
             prefix = ""
-            if "@chatroom" in refer_fromusr:
-                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
-                    uid = refer_fromusr,
-                ))
-            else:
-                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
-                    uid = refer_chatusr,
-                ))
             sent_by_master = True
             if refer_svrid is not None:
                 try:

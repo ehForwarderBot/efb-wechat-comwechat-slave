@@ -27,9 +27,9 @@ from . import __version__ as version
 from ehforwarderbot.channel import SlaveChannel
 from ehforwarderbot.types import MessageID, ChatID, InstanceID
 from ehforwarderbot import utils as efb_utils
-from ehforwarderbot.exceptions import EFBException, EFBChatNotFound
+from ehforwarderbot.exceptions import EFBException, EFBChatNotFound, EFBMessageError
 from ehforwarderbot.message import MessageCommand, MessageCommands
-from ehforwarderbot.status import MessageRemoval
+from ehforwarderbot.status import MessageRemoval, ChatUpdates
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
@@ -317,13 +317,38 @@ class ComWeChatChannel(SlaveChannel):
                 )
             ]
 
-            content["sender"] = sender
-            content["message"] = text
-            content["name"] = name
+            if "@chatroom" in sender:
+                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
+                    uid = sender,
+                    name = self.get_name_by_wxid(sender)
+                ))
+                if sender == wxid:
+                    author = chat.self
+                else:
+                    alias = self.group_members.get(sender,{}).get(wxid , None),
+                    alias = None if alias == name else alias
+                    author = ChatMgr.build_efb_chat_as_member(chat, EFBGroupMember(
+                        uid = wxid,
+                        name = name,
+                        alias = alias
+                    ))
+            else:
+                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
+                    uid = sender,
+                    name = name,
+                ))
+                author = chat.self if sender == self.wxid else chat.other
+                if sender.startswith('gh_'):
+                    chat.vendor_specific = {'is_mp' : True}
+
             # if "v3" in username:
             #     content["commands"] = commands
             # 暂时屏蔽
-            self.system_msg(content)
+            m = Message(
+                type=MsgType.Text,
+                text=text
+            )
+            self.send_efb_msgs(MsgWrapper(msg, m), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
     def login(self):
         self.master_qr_picture_id = None
@@ -797,7 +822,7 @@ class ComWeChatChannel(SlaveChannel):
 
         try:
             if str(res["msg"]) == "0":
-                self.system_msg({'sender':chat_uid, 'message':"发送失败，请在手机端确认"})
+                raise EFBMessageError("发送失败，请在手机端确认")
         except:
             ...
         return msg
@@ -840,7 +865,7 @@ class ComWeChatChannel(SlaveChannel):
                         content = "<content>%s</content>" % content
                     else:
                         content = "<content />"
-                    xml = QUOTE_MESSAGE % (self.wxid, text_to_send, refer_type, msgid, sender, sender, displayname, content)
+                    xml = QUOTE_MESSAGE % (self.wxid, text, refer_type, msgid, sender, sender, displayname, content)
                     return self.bot.SendXml(wxid = wxid , xml = xml, img_path = "")
         return self.bot.SendText(wxid = wxid , msg = text)
 
@@ -916,8 +941,8 @@ class ComWeChatChannel(SlaveChannel):
 
     #定时更新 Start
     def GetContactListBySql(self):
-        self.groups = []
-        self.friends = []
+        new_chats = []
+        modified_chats = []
         contacts = self.bot.GetContactListBySql()
         for contact in contacts:
             data = contacts[contact]
@@ -933,13 +958,26 @@ class ComWeChatChannel(SlaveChannel):
                     uid=contact,
                     name=name
                 )
-                self.groups.append(ChatMgr.build_efb_chat_as_group(new_entity))
+                try:
+                    self.get_chat(contact)
+                    modified_chats.append(contact)
+                except EFBChatNotFound:
+                    self.groups.append(ChatMgr.build_efb_chat_as_group(new_entity))
+                    new_chats.append(contact)
             else:
                 new_entity = EFBPrivateChat(
                     uid=contact,
                     name=name
                 )
-                self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
+                try:
+                    self.get_chat(contact)
+                    modified_chats.append(contact)
+                except EFBChatNotFound:
+                    self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
+                    new_chats.append(contact)
+
+        if new_chats or modified_chats:
+            coordinator.send_status(ChatUpdates(channel=self, new_chats=new_chats, modified_chats=modified_chats))
 
     def load(self):
         rows = self.db.get_all_group_aliases()
