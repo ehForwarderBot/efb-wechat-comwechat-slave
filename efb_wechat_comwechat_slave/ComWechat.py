@@ -897,10 +897,10 @@ class ComWeChatChannel(SlaveChannel):
         t.start()
 
     def send_status(self, status: 'Status'):
-        self.db.stop_worker()
+        ...
 
     def stop_polling(self):
-        ...
+        self.db.stop_worker()
 
     def get_message_by_id(self, chat: 'Chat', msg_id: MessageID) -> Optional['Message']:
         ...
