@@ -574,10 +574,10 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
 
 def efb_location_wrapper(msg: str) -> Message:
     efb_msg = Message()
-    label = re.search('''label="(.*?)"''', msg).group(1)
+    text = re.search('''poiname="(.*?)"''', msg).group(1)
     x = re.search('''x="(.*?)"''', msg).group(1)
     y = re.search('''y="(.*?)"''', msg).group(1)
-    efb_msg.text = label
+    efb_msg.text = text
     efb_msg.attributes = LocationAttribute(latitude=float(x),
                                            longitude=float(y))
     efb_msg.type = MsgType.Location
