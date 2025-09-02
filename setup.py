@@ -27,6 +27,7 @@ setup(
         "cachetools",
         "requests",
         "qrcode",
+        "peewee",
         "pyzbar",
         "python-magic",
         "lxml",

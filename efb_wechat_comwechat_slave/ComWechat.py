@@ -1,6 +1,7 @@
 import logging, tempfile
 import time
 import threading
+from lxml import etree
 from traceback import print_exc
 from pydub import AudioSegment
 import qrcode
@@ -35,6 +36,7 @@ from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystem
 from .MsgDeco import qutoed_text
 from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
+from .db import DatabaseManager
 from .Constant import QUOTE_MESSAGE
 
 from rich.console import Console
@@ -55,6 +57,7 @@ class ComWeChatChannel(SlaveChannel):
     groups : EFBGroupChat    = []
 
     contacts : Dict = {}            # {wxid : {alias : str , remark : str, nickname : str , type : int}} -> {wxid : name(after handle)}
+    nicknames : Dict = {}
     group_members : Dict = {}       # {"group_id" : { "wxID" : "displayName"}}
 
     time_out : int = 120
@@ -75,6 +78,7 @@ class ComWeChatChannel(SlaveChannel):
         self.logger.info("ComWeChat Slave Channel initialized.")
         self.logger.info("Version: %s" % self.__version__)
         self.config = load_config(efb_utils.get_config_path(self.channel_id))
+        self.db: DatabaseManager = DatabaseManager(self)
         self.bot = WeChatRobot()
 
         self.qr_url = ""
@@ -88,6 +92,7 @@ class ComWeChatChannel(SlaveChannel):
         self.me = self.bot.GetSelfInfo()["data"]
         self.wxid = self.me["wxId"]
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
+        self.load()
         self.dir = self.config["dir"]
         if not self.dir.endswith(os.path.sep):
             self.dir += os.path.sep
@@ -106,6 +111,7 @@ class ComWeChatChannel(SlaveChannel):
                     name = name,
                 ))
                 author = chat.self
+                self.extract_alias(msg)
             else:
                 chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid = sender,
@@ -155,11 +161,15 @@ class ComWeChatChannel(SlaveChannel):
                 name = self.contacts[wxid]
             except:
                 name = wxid
+            self.extract_alias(msg)
+            alias = self.group_members.get(sender,{}).get(wxid , None)
+            if alias == self.nicknames.get(wxid, None):
+                alias = None
 
             author = ChatMgr.build_efb_chat_as_member(chat, EFBGroupMember(
                 uid = wxid,
                 name = name,
-                alias = self.group_members.get(sender,{}).get(wxid , None),
+                alias = alias
             ))
             self.handle_msg(msg, author, chat)
 
@@ -177,6 +187,13 @@ class ComWeChatChannel(SlaveChannel):
                     uid = sender,
                     name = name,
                 ))
+                xml = etree.fromstring(msg["message"])
+                text = xml.xpath('string(/sysmsg/revokemsg/replacemsg)')
+                alias = re.search(r'^"(.*?)" (撤回了一条消息|recalled a message)$', text)
+                if alias and alias.group(1) != self.get_nickname_by_wxid(wxid):
+                    self.merge_group_members(sender, {
+                        wxid: alias.group(1)
+                    })
             else:
                 chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
                     uid = sender,
@@ -883,7 +900,7 @@ class ComWeChatChannel(SlaveChannel):
         ...
 
     def stop_polling(self):
-        ...
+        self.db.stop_worker()
 
     def get_message_by_id(self, chat: 'Chat', msg_id: MessageID) -> Optional['Message']:
         ...
@@ -899,9 +916,28 @@ class ComWeChatChannel(SlaveChannel):
                 name = data[3]
                 if name == "":
                     name = wxid
+                else:
+                    self.contacts[wxid] = name
             else:
                 name = wxid
         return name
+
+    def get_nickname_by_wxid(self, wxid):
+        try:
+            nickname = self.nicknames[wxid]
+            if nickname == "":
+                nickname = wxid
+        except:
+            data = self.bot.GetContactBySql(wxid = wxid)
+            if data:
+                nickname = data[3]
+                if nickname == "":
+                    nickname = wxid
+                else:
+                    self.nicknames[wxid] = nickname
+            else:
+                nickname = wxid
+        return nickname
 
     #定时更新 Start
     def GetContactListBySql(self):
@@ -913,6 +949,7 @@ class ComWeChatChannel(SlaveChannel):
             name = (f"{data['remark']}({data['nickname']})") if data["remark"] else data["nickname"]
 
             self.contacts[contact] = name
+            self.nicknames[contact] = data["nickname"]
             if data["type"] == 0 or data["type"] == 4:
                 continue
 
@@ -942,8 +979,52 @@ class ComWeChatChannel(SlaveChannel):
         if new_chats or modified_chats:
             coordinator.send_status(ChatUpdates(channel=self, new_chats=new_chats, modified_chats=modified_chats))
 
+    def load(self):
+        rows = self.db.get_all_group_aliases()
+        for r in rows:
+            self.group_members[r.group_uid] = self.group_members.get(r.group_uid, {})
+            self.group_members[r.group_uid][r.wxid] = r.group_alias
+
+    def merge_group_members(self, group, new_members):
+        self.group_members[group] = self.group_members.get(group, {})
+        for wxid, alias in new_members.items():
+            if self.group_members[group].get(wxid, None) != alias:
+                self.group_members[group][wxid] = alias
+                self.db.update_group_alias(group, wxid, alias)
+
     def GetGroupListBySql(self):
-        self.group_members = self.bot.GetAllGroupMembersBySql()
+        groups = self.bot.GetAllGroupMembersBySql()
+        for group, members in groups.items():
+            self.merge_group_members(group, members)
+
+    def extract_alias(self, msg):
+        sender = msg["sender"]
+        extracted = False
+        if "<refermsg>" in msg["message"]:
+            xml = etree.fromstring(msg["message"])
+            id = xml.xpath('string(/msg/appmsg/refermsg/chatusr)')
+            alias = xml.xpath('string(/msg/appmsg/refermsg/displayname)')
+            name = self.get_nickname_by_wxid(id)
+            if alias and alias != name:
+                extracted = True
+                self.merge_group_members(sender, {
+                    id: alias
+                })
+
+        if not extracted and "<atuserlist>" in msg["extrainfo"]:
+            xml = etree.fromstring(msg["extrainfo"])
+            at_user = xml.xpath('string(/msgsource/atuserlist)')
+            user_list = [user for user in at_user.split(",") if user]
+            if len(user_list) == 1:
+                try:
+                    name = self.get_nickname_by_wxid(user_list[0])
+                    alias = re.search("^@(.*)\u2005", msg["message"]).group(1)
+                    if alias != name:
+                        self.merge_group_members(sender, {
+                            user_list[0]: alias
+                        })
+                except:
+                    print_exc()
     #定时更新 End
 
 
