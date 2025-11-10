@@ -4,6 +4,8 @@ from lxml import etree
 from functools import partial
 from traceback import print_exc
 import re , json
+from urllib.parse import urlparse, parse_qs, unquote
+import requests as requests
 
 from ehforwarderbot import MsgType, Chat, coordinator
 from ehforwarderbot.chat import ChatMember
@@ -77,6 +79,33 @@ def parse_chat_history(xml, level: int = 1) -> list[dict]:
 
             res.append(data)
     return res
+
+def parse_amap_url(url: str):
+    if not url.startswith("https://surl.amap.com"):
+        return None
+    try:
+        response = requests.get(url, allow_redirects=False)
+        location = response.headers.get('Location')
+        if location:
+            parsed = urlparse(location)
+            host = parsed.netloc
+            params = parse_qs(parsed.query)
+            if "p" in params:
+                p_param = unquote(params["p"][0])
+                parts = p_param.split(",")
+
+                if len(parts) >= 5:
+                    poiid, lat, lng, name, address = parts[:5]
+                    efb_msg = Message(
+                        type=MsgType.Location,
+                        text=name
+                    )
+                    efb_msg.attributes = LocationAttribute(latitude=float(lat),
+                                                        longitude=float(lng))
+                    return efb_msg
+    except Exception as e:
+        return None
+    return None
 
 def efb_text_simple_wrapper(text: str, ats: Union[Mapping[Tuple[int, int], Union[Chat, ChatMember]], None] = None) -> Message:
     """
@@ -564,6 +593,10 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
         print_exc()
 
     try:
+        if efb_msg.type == MsgType.Link:
+            m = parse_amap_url(efb_msg.attributes.url)
+            if m:
+                return m
         return efb_msg
     except:
         efb_msg = Message(
