@@ -616,6 +616,9 @@ class ComWeChatChannel(SlaveChannel):
         if not self.friends and not self.groups:
             self.GetContactListBySql()
 
+        return self._get_chat(chat_uid)
+
+    def _get_chat(self, chat_uid: ChatID) -> 'Chat':
         if "@chatroom" in chat_uid:
             for group in self.groups:
                 if group.uid == chat_uid:
@@ -922,7 +925,7 @@ class ComWeChatChannel(SlaveChannel):
                     name=name
                 )
                 try:
-                    self.get_chat(contact)
+                    self._get_chat(contact)
                     modified_chats.append(contact)
                 except EFBChatNotFound:
                     self.groups.append(ChatMgr.build_efb_chat_as_group(new_entity))
@@ -933,7 +936,7 @@ class ComWeChatChannel(SlaveChannel):
                     name=name
                 )
                 try:
-                    self.get_chat(contact)
+                    self._get_chat(contact)
                     modified_chats.append(contact)
                 except EFBChatNotFound:
                     self.friends.append(ChatMgr.build_efb_chat_as_private(new_entity))
