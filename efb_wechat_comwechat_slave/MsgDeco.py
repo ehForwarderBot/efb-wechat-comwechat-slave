@@ -223,7 +223,7 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
     //appmsg/type = 19 : 合并转发的聊天记录
     //appmsg/type = 21 : 微信运动
     //appmsg/type = 24 : 从收藏中分享的笔记
-    //appmsg/type = 33 : 美团外卖
+    //appmsg/type = 33 : 美团外卖/腾讯微证券
     //appmsg/type = 35 : 消息同步
     //appmsg/type = 36 : 京东农场，滴滴打车
     //appmsg/type = 51 : 视频（微信视频号分享）
@@ -408,10 +408,11 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
             )
         elif type == 33:
             sourcedisplayname = xml.xpath('/msg/appmsg/sourcedisplayname/text()')[0]
+            title = xml.xpath('string(/msg/appmsg/title)')
             weappiconurl = xml.xpath('/msg/appmsg/weappinfo/weappiconurl/text()')[0]
             url = xml.xpath('/msg/appmsg/url/text()')[0]
             attribute = LinkAttribute(
-                title=sourcedisplayname,
+                title=f"{sourcedisplayname}\n{title}",
                 description=None,
                 url=url,
                 image=weappiconurl
@@ -477,14 +478,6 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 vendor_specific={ "is_refer": True }
             )
             prefix = ""
-            if "@chatroom" in refer_fromusr:
-                chat = ChatMgr.build_efb_chat_as_group(EFBGroupChat(
-                    uid = refer_fromusr,
-                ))
-            else:
-                chat = ChatMgr.build_efb_chat_as_private(EFBPrivateChat(
-                    uid = refer_chatusr,
-                ))
             sent_by_master = True
             if refer_svrid is not None:
                 try:
@@ -539,12 +532,13 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
                 vendor_specific={ "is_mp": True }
             )
         elif type == 87: # 群公告
-            title = xml.xpath('/msg/appmsg/textannouncement/text()')[0]
-            efb_msg = Message(
-                type=MsgType.Text,
-                text= f"[群公告]:\n{title}" ,
-                vendor_specific={ "is_mp": False }
-            )
+            return
+        #     title = xml.xpath('/msg/appmsg/textannouncement/text()')[0]
+        #     efb_msg = Message(
+        #         type=MsgType.Text,
+        #         text= f"[群公告]:\n{title}" ,
+        #         vendor_specific={ "is_mp": False }
+        #     )
         elif type == 2000:
             subtype = xml.xpath("/msg/appmsg/wcpayinfo/paysubtype/text()")[0]
             money =  xml.xpath("/msg/appmsg/wcpayinfo/feedesc/text()")[0].strip("<![CDATA[").strip("]]>")
@@ -580,10 +574,10 @@ def efb_share_link_wrapper(message: dict, chat) -> Message:
 
 def efb_location_wrapper(msg: str) -> Message:
     efb_msg = Message()
-    label = re.search('''label="(.*?)"''', msg).group(1)
+    text = re.search('''poiname="(.*?)"''', msg).group(1)
     x = re.search('''x="(.*?)"''', msg).group(1)
     y = re.search('''y="(.*?)"''', msg).group(1)
-    efb_msg.text = label
+    efb_msg.text = text
     efb_msg.attributes = LocationAttribute(latitude=float(x),
                                            longitude=float(y))
     efb_msg.type = MsgType.Location
@@ -673,7 +667,7 @@ def efb_voice_wrapper(file: IO, filename: str = None, text: str = None) -> Messa
         efb_msg.text = text
     return efb_msg
 
-def efb_other_wrapper(text: str) -> Union[Message, None]:
+def efb_other_wrapper(text: str, chat) -> Union[Message, None]:
     """
     A simple EFB message wrapper for other message
     :param text: The content of the message
@@ -754,6 +748,17 @@ def efb_other_wrapper(text: str) -> Union[Message, None]:
             text= None,
             vendor_specific={ "is_mp": False }
             )
+
+    elif msg_type == "mmchatroombarannouncememt":
+        title = xml.xpath('/sysmsg/mmchatroombarannouncememt/content/text()')[0]
+        at_list = {}
+        at_list[(1, 4)] = chat.self
+        efb_msg = Message(
+            type=MsgType.Text,
+            text= f"[群公告]:\n{title}" ,
+            vendor_specific={ "is_mp": False },
+            substitutions = Substitutions(at_list)
+        )
 
     if efb_msg:
         return efb_msg
