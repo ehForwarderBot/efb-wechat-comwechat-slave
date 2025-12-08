@@ -81,9 +81,6 @@ class ComWeChatChannel(SlaveChannel):
         self.db: DatabaseManager = DatabaseManager(self)
         self.bot = WeChatRobot()
 
-        self.qr_file = None
-
-        self.qrcode_timeout = self.config.get("qrcode_timeout", 10)
         self.wxid = None
         self.base_path = self.config["base_path"] if "base_path" in self.config else self.bot.get_base_path()
         self.load()
@@ -389,28 +386,10 @@ class ComWeChatChannel(SlaveChannel):
             tmp_file.write(qr_code)
             tmp_file.flush()
         except:
-            print("[red]获取二维码失败[/red]", flush=True)
+            print("[red]获取二维码失败[/red]")
             tmp_file.close()
             return None
         return tmp_file
-
-    def login_prompt(self):
-        file = self.get_qrcode()
-        chat = self.user_auth_chat
-        author = self.user_auth_chat.other
-        msg = Message(
-            type=MsgType.Text,
-            uid=MessageID(str(int(time.time()))),
-        )
-
-        if not file:
-            self.confirm_login()
-        else:
-            msg.type = MsgType.Image
-            msg.path = Path(file.name)
-            msg.file = file
-            msg.mime = 'image/png'
-            self.send_efb_msgs(msg, chat=chat, author=author)
 
     def confirm_login(self):
         chat = self.user_auth_chat
@@ -434,8 +413,27 @@ class ComWeChatChannel(SlaveChannel):
     @efb_utils.extra(name="Get QR Code",
            desc="重新扫码登录")
     def reauth(self, _: str = "") -> str:
-        self.login_prompt()
-        return "扫码成功之后，请点击 confirm 进行下一步"
+        file = self.get_qrcode()
+        chat = self.user_auth_chat
+        author = self.user_auth_chat.other
+        msg = Message(
+            type=MsgType.Text,
+            uid=MessageID(str(int(time.time()))),
+        )
+
+        if not file:
+            if self.is_login():
+                self.after_login()
+                return "登录成功"
+            else:
+                return "获取二维码失败，请稍后再试"
+        else:
+            msg.type = MsgType.Image
+            msg.path = Path(file.name)
+            msg.file = file
+            msg.mime = 'image/png'
+            self.send_efb_msgs(msg, chat=chat, author=author)
+        return "请扫描二维码登录"
 
     @efb_utils.extra(name="Force Logout",
            desc="强制退出")
