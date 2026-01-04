@@ -842,7 +842,7 @@ class ComWeChatChannel(SlaveChannel):
                 else:
                     msgid = msg.target.uid
                     sender = msg.target.author.uid
-                    displayname = msg.target.author.name
+                    displayname = self.get_nickname_by_wxid(sender)
                     content = escape(msg.target.vendor_specific.get("wx_xml", ""), {
                         "\n": "&#x0A;",
                         "\t": "&#x09;",
