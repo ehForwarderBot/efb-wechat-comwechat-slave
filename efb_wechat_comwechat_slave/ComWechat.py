@@ -11,8 +11,8 @@ from xml.sax.saxutils import escape
 
 import re
 import json
-from ehforwarderbot.chat import SystemChat, PrivateChat , SystemChatMember, ChatMember, SelfChatMember
 import hashlib
+from ehforwarderbot.chat import SystemChat, PrivateChat , GroupChat, SystemChatMember, ChatMember, SelfChatMember
 from typing import Tuple, Optional, Collection, BinaryIO, Dict, Any , Union , List
 from datetime import datetime
 from cachetools import TTLCache
@@ -31,7 +31,7 @@ from ehforwarderbot.status import MessageRemoval, ChatUpdates
 
 from .ChatMgr import ChatMgr
 from .CustomTypes import EFBGroupChat, EFBPrivateChat, EFBGroupMember, EFBSystemUser
-from .MsgDeco import qutoed_text
+from .MsgDeco import qutoed_text, rebuild_media_msg
 from .MsgProcess import MsgProcess, MsgWrapper
 from .Utils import download_file , load_config , load_temp_file_to_local , WC_EMOTICON_CONVERSION
 from .db import DatabaseManager
@@ -506,22 +506,23 @@ class ComWeChatChannel(SlaveChannel):
                 msg["timestamp"] = int(time.time())
                 msg["filepath"] = msg["filepath"].replace("\\","/")
                 msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
-                self.file_msg[msg["filepath"]] = ( msg , author , chat )
+                self._send_file_msg(msg , author , chat )
                 return
             if msg["type"] == "video":
                 msg["timestamp"] = int(time.time())
                 msg["filepath"] = msg["thumb_path"].replace("\\","/").replace(".jpg", ".mp4")
                 msg["filepath"] = f'''{self.dir}{msg["filepath"]}'''
-                self.file_msg[msg["filepath"]] = ( msg , author , chat )
+                self._send_file_msg(msg , author , chat )
                 return
-        except:
+        except Exception as e:
+            self.logger.warning(f"Failed to process file msg: {e}")
             ...
 
         if msg["type"] == "voice":
             file_path = re.search("clientmsgid=\"(.*?)\"", msg["message"]).group(1) + ".amr"
             msg["timestamp"] = int(time.time())
             msg["filepath"] = f'''{self.dir}{msg["self"]}/{file_path}'''
-            self.file_msg[msg["filepath"]] = ( msg , author , chat )
+            self._send_file_msg(msg , author , chat )
             return
 
         self.send_efb_msgs(MsgWrapper(msg, MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
@@ -534,14 +535,26 @@ class ComWeChatChannel(SlaveChannel):
                 for path in list(self.file_msg.keys()):
                     flag = False
                     msg = self.file_msg[path][0]
-                    author = self.file_msg[path][1]
-                    chat = self.file_msg[path][2]
+                    author: ChatMember = self.file_msg[path][1]
+                    chat : Chat= self.file_msg[path][2]
+                    commands = []
+                    msg_type = msg["type"]
                     if os.path.exists(path):
                         flag = True
                     elif (int(time.time()) - msg["timestamp"]) > self.time_out:
-                        msg_type = msg["type"]
                         msg['message'] = f"[{msg_type} 下载超时,请在手机端查看]"
                         msg["type"] = "text"
+                        commands.append(
+                            MessageCommand(
+                                name=("Retry"),
+                                callable_name="retry_download",
+                                kwargs={
+                                    "msgid": msg["msgid"],
+                                    "msgtype": msg_type,
+                                    "chatuid": chat.uid,
+                                },
+                            )
+                        )
                         flag = True
                     elif msg["type"] == "voice":
                         sql = f'SELECT Buf FROM Media WHERE Reserved0 = {msg["msgid"]}'
@@ -555,8 +568,14 @@ class ComWeChatChannel(SlaveChannel):
                             flag = True
 
                     if flag:
+                        m = MsgProcess(msg, chat)
+                        m.edit = True
+                        m.edit_media = True
+                        if commands: 
+                            m.commands = MessageCommands(commands)
+                        m.vendor_specific["wechat_msgtype"] = msg_type
                         del self.file_msg[path]
-                        self.send_efb_msgs(MsgWrapper(msg, MsgProcess(msg, chat)), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+                        self.send_efb_msgs(MsgWrapper(msg, m), author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
 
             if len(self.delete_file):
                 for k in list(self.delete_file.keys()):
@@ -568,6 +587,67 @@ class ComWeChatChannel(SlaveChannel):
                         except:
                             pass
                         del self.delete_file[file_path]
+
+    def _send_file_msg(self, msg: Message, author: ChatMember, chat: Chat):
+        if msg["filepath"] == self.dir:
+            self.logger.warning(f"Wrong message {msg['msgid']} at {msg['filepath']}.")
+            text = f"download {msg['type']} failed"
+            efb_msg = Message(
+                type=MsgType.Text,
+                text=text,
+                commands = MessageCommands([
+                    MessageCommand(
+                        name=("Retry"),
+                        callable_name="retry_download",
+                        kwargs={
+                            "msgid": msg["msgid"],
+                            "msgtype": msg["type"],
+                            "chatuid": chat.uid,
+                        },
+                    )
+                ])
+            )
+            self.send_efb_msgs(efb_msg, author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+        else:
+            msg_type = msg['type']
+            text = f"{msg_type} is downloading, please wait..."
+            efb_msg = Message(
+                type=MsgType.Text,
+                text=text
+            )
+            self.send_efb_msgs(efb_msg, author=author, chat=chat, uid=MessageID(str(msg['msgid'])))
+            self.file_msg[msg["filepath"]] = ( msg , author , chat )
+
+    def retry_download(self, msgid, chatuid, msgtype):
+        path = self.GetMsgCdn(msgid)
+        if not path:
+            return "[下载失败]"
+        chat = self.get_chat(chatuid)
+        efb_msgs = rebuild_media_msg(msgtype, path)
+        if not efb_msgs:
+            return f"[不支持的文件类型: {msgtype}]"
+        master_message = coordinator.master.get_message_by_id(chat=chat, msg_id=msgid)
+        self.send_efb_msgs(efb_msgs, uid=msgid, author=master_message.author, chat=master_message.chat, edit=True, edit_media=True)
+        return "下载成功"
+
+    def retry_download_target(self, target: Message = None):
+        path = self.GetMsgCdn(target.uid)
+        if not path:
+            raise EFBMessageError("[重试失败,请在手机端查看,可通过 /retry 回复本条消息再次重试]")
+        msgtype = target.vendor_specific.get("wechat_msgtype", None)
+        if not msgtype:
+            if target.type == MsgType.Image:
+                msgtype = "image"
+            elif target.type == MsgType.File:
+                msgtype = "share"
+            elif target.type == MsgType.Voice:
+                msgtype = "voice"
+            elif target.type == MsgType.Video:
+                msgtype = "video"
+        efb_msgs = rebuild_media_msg(msgtype, path)
+        author = target.author
+        chat = target.chat
+        self.send_efb_msgs(efb_msgs, uid=target.uid, author=author, chat=chat, edit=True, edit_media=True)
 
     def process_friend_request(self , v3 , v4):
         self.logger.debug(f"process_friend_request:{v3} {v4}")
@@ -739,8 +819,7 @@ class ComWeChatChannel(SlaveChannel):
                             msg.target.text = text
                         self.send_efb_msgs(msg.target, edit=True)
                     else:
-                        text = f"无法转发{msgid},不是有效的微信消息"
-                        self.system_msg({'sender': chat_uid, 'message': text, 'target': msg.target})
+                        raise EFBMessageError(f"无法转发{msgid},不是有效的微信消息")
                     return msg
             elif msg.text.startswith('/at'):
                 users_message = msg.text[4::].split(' ', 1)
@@ -755,6 +834,12 @@ class ComWeChatChannel(SlaveChannel):
                     res = self.bot.SendAt(chatroom_id = chat_uid, wxids = users, msg = message)
                 else:
                     self.bot.SendText(wxid = chat_uid , msg = msg.text)
+            elif msg.text.startswith('/retry'):
+                if isinstance(msg.target, Message):
+                    self.retry_download_target(target=msg.target)
+                    return msg
+                else:
+                    raise EFBMessageError("回复超时消息时使用")
             elif msg.text.startswith('/sendcard'):
                 user_nickname = msg.text[10::].split(' ', 1)
                 if len(user_nickname) == 2:
@@ -924,6 +1009,26 @@ class ComWeChatChannel(SlaveChannel):
             else:
                 name = wxid
         return name
+
+    def GetMsgCdn(self, msgid):
+        try:
+            res = self.bot.GetCdn(msgid=msgid)
+            if res["msg"] == 1:
+                path = res["path"].replace(self.bot.get_base_path() + "\\", self.dir).replace("\\","/")
+                count = 1
+                while True:
+                    if os.path.exists(path):
+                        break
+                    elif count > 12:  # telegram 超过 15s 会报错
+                        self.logger.warning(f"Timeout when retrying download {msgid} at {path}.")
+                        return
+                    count += 1
+                    time.sleep(1)
+
+                self.logger.debug(f"Download {path} successfully.")
+                return path
+        except Exception as e:
+            self.logger.warning(f"Error occurred when retrying download {msgid}. {e}")
 
     @staticmethod
     def non_blocking_lock_wrapper(lock: threading.Lock) :
